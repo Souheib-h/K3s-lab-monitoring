@@ -136,11 +136,16 @@ CPU      : 2
 Disk     : 8 GB
 ```
 
+![Cluster et monitoring sans gateway](img/opnsens-web-interface.png)
 ### Configuration OPNsense
 
 **Interfaces → [WAN]** : désactiver "Block private networks"
 
+![Block private networks](Block-private-networks.png)
+
 **Firewall → NAT → Outbound** : mode "Disable"
+
+![Outbound disabled](Outbound-disable.png)
 
 ### Fix du masquerading libvirt
 
