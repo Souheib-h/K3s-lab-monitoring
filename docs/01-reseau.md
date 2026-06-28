@@ -141,11 +141,11 @@ Disk     : 8 GB
 
 **Interfaces → [WAN]** : désactiver "Block private networks"
 
-![Block private networks](Block-private-networks.png)
+![Block private networks](img/Block-private-networks.png)
 
 **Firewall → NAT → Outbound** : mode "Disable"
 
-![Outbound disabled](Outbound-disable.png)
+![Outbound disabled](img/Outbound-disable.png)
 
 ### Fix du masquerading libvirt
 
