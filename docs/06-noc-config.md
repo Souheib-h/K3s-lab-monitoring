@@ -23,16 +23,14 @@ Verified beyond the test button itself by browsing **Drilldown → Metrics**: 31
 
 ![Prometheus metrics pulled into Grafana](img/grafna-prometheus-metrics-pulled.png)
 
-## Zabbix datasource — ⏸️ Blocked (unresolved)
 
-**Attempted setup:**
+## Zabbix datasource — ❌ Removed from stack
 
-```
-URL: http://10.20.0.10/zabbix/api_jsonrpc.php
-Plugin: alexanderzobnin-zabbix-app (Zabbix data source by Grafana Labs)
-```
+**See [DECISIONS.md — ADR-001](K3s-lab-monitoring/DECISIONS.md) for the full architectural decision and reasoning.**
 
-### Installation troubleshooting
+In summary: after exhaustive troubleshooting of the Grafana-Zabbix plugin integration, and a review of Zabbix's role in this specific stack, Zabbix was removed from the active monitoring architecture. Every capability it would have provided is already covered by Wazuh (SOC/security) and Prometheus (metrics/NOC).
+
+### Plugin installation troubleshooting
 
 The plugin install itself required several non-obvious fixes before it would even load:
 
@@ -44,16 +42,17 @@ The plugin install itself required several non-obvious fixes before it would eve
 
 ![Enabling the Zabbix plugin](img/grafana-zabbix-enabling.png)
 
-### Connection troubleshooting — root cause not resolved
+### Connection troubleshooting
 
 Once enabled, datasource setup was attempted:
 
 ![Zabbix datasource configuration](img/grafana-zabbix-datasourcce-add.png)
 
-**Save & test** consistently returns one of two errors depending on the auth method:
+**Save & test** consistently failed regardless of auth method:
 
-- **User and password auth**: hangs for exactly 60 seconds, then fails with `Zabbix authentication error: context deadline exceeded` — a query timeout, not a credentials issue.
-- **API token auth**: fails immediately with `Could not connect to given url`.
+- **User and password**: hangs for exactly 60 seconds → `Zabbix authentication error: context deadline exceeded`
+- **API token**: fails immediately → `Could not connect to given url`
+- **Direct DB Connection via MySQL**: MySQL datasource connected successfully and raw SQL queries returned live Zabbix data — but the plugin still requires a working API auth before allowing Direct DB Connection to function
 
 **Eliminated as causes** (each independently verified):
 
@@ -65,21 +64,15 @@ Once enabled, datasource setup was attempted:
 | File permission issue on plugin binary | `ls -la` on the datasource binary | Correct `-rwxr-xr-x`, owned by `grafana` |
 | Unsigned plugin blocked | Checked plugin signature status in UI | Signed, `grafana` signature confirmed |
 | No internet access for plugin version checks | `curl` to `grafana.com/api/plugins/...` from Grafana-srv | 200 OK, fast response |
-| Plugin version incompatibility (6.4.0) | Downgraded to plugin v6.2.0 | Same error |
+| Plugin version incompatibility (6.4.0) | Downgraded to plugin v6.3.0 then v6.2.0 | Same error across all versions |
 | Grafana version incompatibility (13.1.0) | Downgraded Grafana to 12.4.5 | Same error |
 
-A matching public report was found on the plugin's GitHub repository — [grafana/grafana-zabbix#1957](https://github.com/grafana/grafana-zabbix/issues/1957): *"After updating Grafana from 11.4.1 to 11.5.0 the Zabbix plugin can no longer connect and returns 'Could not connect to given url'"* — confirming this is a known upstream compatibility issue between the plugin and recent Grafana versions, not a misconfiguration on this lab's side.
-
-### Status
-
-Paused after exhausting the standard troubleshooting surface (network, auth, permissions, signature, two plugin versions, two Grafana versions). Grafana restored to 13.1.0 (latest stable) rather than staying on an arbitrary downgrade that didn't resolve the issue.
-
-**Possible paths forward, not yet attempted:**
-- Direct DB Connection (bypasses the broken JSON-RPC API path entirely, queries Zabbix's MySQL database directly via a native MySQL datasource)
-- YAML provisioning instead of the UI form (may take a different code path)
-- File an issue on the plugin repo with this reproduction case
-- Wait for an upstream fix and retry
+Root cause: Zabbix 7.4 removed the legacy `auth` parameter from JSON-RPC, and `Authorization: Bearer` header auth also fails — a known upstream issue confirmed in [grafana/grafana-zabbix#1957](https://github.com/grafana/grafana-zabbix/issues/1957). Plugin versions 6.2.0, 6.3.0, and 6.4.0 were tested across Grafana 12.4.5 and 13.1.0 — none resolved the issue.
 
 ## Dashboard imports
 
-Deferred until the Zabbix connection issue is resolved or worked around — Cluster View and Node View dashboards depend on both datasources being functional.
+NOC dashboards will use **Prometheus exclusively** as the datasource.
+
+- `node_exporter` deployment on all monitored VMs (K3s nodes + monitoring VMs) is deferred to **Phase 5 (Ansible)**
+- Once exporters are deployed, Prometheus scrape config will be extended with all targets
+- Dashboard to import: **Node Exporter Full** (Grafana dashboard ID `1860`) — community standard, 30M+ downloads, covers CPU, memory, disk, network, filesystem per host
