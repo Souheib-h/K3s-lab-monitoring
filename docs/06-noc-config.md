@@ -68,7 +68,6 @@ See full post-mortem: [`docs/troubleshooting/zabbix-apache-authorization-header.
 
 **Connections → Add new data source → Zabbix**
 
-![Zabbix datasource configuration](img/grafana-zabbix-datasourcce-add.png)
 
 ```
 URL:              http://10.20.0.10/zabbix/api_jsonrpc.php
