@@ -101,6 +101,7 @@ Default credentials: `Admin` / `zabbix`
 
 ![Zabbix installation complete](img/zabbix-done.png)
 
+> **Note:** If the Grafana-Zabbix plugin returns `"Not authorized"` despite correct credentials, the Apache `php8.5-fpm` conf may not be enabled. See [`docs/troubleshooting/zabbix-apache-authorization-header.md`](troubleshooting/zabbix-apache-authorization-header.md).
 ## Result
 
 - Zabbix server running, self-monitoring active (1 host: "Zabbix server")
