@@ -1,6 +1,6 @@
 # Architecture Decision Records
 
-This document captures the key architectural decisions made throughout the `K3s-lab-monitoring` project — not *what* was built, but *why* it was built that way. Each ADR answers: what was the context, what was decided, what alternatives were considered, and what are the consequences.
+This document captures the key architectural decisions made throughout the `K3s-lab-monitoring` project — not _what_ was built, but _why_ it was built that way. Each ADR answers: what was the context, what was decided, what alternatives were considered, and what are the consequences.
 
 ---
 
@@ -15,6 +15,7 @@ The lab runs a K3s cluster (3 control planes, 3 workers, 1 LB, 1 DB) alongside a
 ### Decision
 
 Two separate networks:
+
 - `k3s-net` (10.10.0.0/24) — cluster traffic
 - `monitoring-net` (10.20.0.0/24) — monitoring stack
 
@@ -44,6 +45,7 @@ With two isolated networks, something needs to route between them. Options range
 ### Decision
 
 OPNsense 26.1 deployed as a dedicated VM with:
+
 - WAN interface on `k3s-net` (10.10.0.254)
 - LAN interface on `monitoring-net` (10.20.0.254)
 
@@ -89,35 +91,39 @@ All-in-one deployment on a single `Wazuh-srv` VM (8GB RAM, 4 vCPU).
 
 ---
 
-## ADR-004 — Prometheus + node_exporter for NOC metrics
+## ADR-004 — Zabbix agent for host metrics, Prometheus for K8s/application metrics
 
-**Status:** Decided
+**Status:** Decided (revised)
 
 ### Context
 
-The NOC stack needs to collect and visualize host-level metrics (CPU, RAM, disk, network) from K3s nodes and monitoring VMs.
+The NOC stack needs metrics at two levels: host-level (CPU, RAM, disk, network) and K8s/application-level (pod status, container metrics, application counters).
 
 ### Decision
 
-- Prometheus scrapes `node_exporter` instances on each monitored VM
-- Grafana uses Prometheus as its NOC datasource
-- Dashboard: **Node Exporter Full** (Grafana ID `1860`)
+- **Zabbix agent** — host-level metrics on all monitored VMs. Already collected and stored in Zabbix, visualized in Grafana via the Zabbix datasource.
+- **Prometheus** — K8s and application-level metrics if/when needed (kube-state-metrics, application exporters). Not deployed at host level since Zabbix agent covers that.
 
-### Why
+### Why node_exporter was dropped
 
-- **Standard** — node_exporter + Prometheus is the de facto standard for Linux host metrics. 1000+ community dashboards available.
-- **Native Grafana support** — no plugin required, no compatibility issues.
-- **Pull model** — Prometheus scrapes targets on its schedule; no agent-to-server push config needed beyond exposing port 9100.
-- **Separation of concerns** — Prometheus handles metrics; Wazuh handles security events. Each tool does one thing well.
+Originally planned to deploy `node_exporter` on all VMs for Prometheus to scrape host metrics. Dropped after the Grafana-Zabbix plugin was successfully connected — Zabbix agent already collects the same host metrics and Grafana can visualize them directly via the Zabbix datasource. node_exporter would be pure duplication.
+
+### Role split
+
+|Tool|Scope|
+|---|---|
+|**Zabbix agent**|Host-level metrics — all VMs|
+|**Prometheus**|K8s/app metrics — when needed|
+|**Grafana**|Unified visualization (both datasources)|
 
 ### Alternatives rejected
 
-- **Zabbix agent for metrics** — Zabbix collects the same data, but requires the Grafana-Zabbix plugin to visualize it in Grafana (see ADR-005). Prometheus is simpler and more Grafana-native for this use case.
-- **Wazuh for metrics** — Wazuh is a SIEM, not a metrics platform. It doesn't expose time-series data in a Prometheus-compatible format.
+- **node_exporter + Prometheus for host metrics** — initially planned, dropped as redundant once Zabbix datasource was working in Grafana.
+- **Wazuh for metrics** — Wazuh is a SIEM, not a metrics platform. No time-series data in Prometheus-compatible format.
 
 ---
 
-## ADR-005 — Zabbix retained in the stack for SOC/infrastructure monitoring
+## ADR-005 — Zabbix retained in the stack for infrastructure monitoring
 
 **Status:** Decided (revised — see history below)
 
@@ -135,50 +141,53 @@ Zabbix was originally planned as part of the monitoring stack. During Phase 3, t
 
 Apache was stripping the `Authorization` header before it reached PHP-FPM, causing every authenticated Zabbix API call to return `"Not authorized"`. Fix: `sudo a2enconf php8.5-fpm && sudo systemctl reload apache2`.
 
-See full post-mortem: [`docs/troubleshooting/zabbix-apache-authorization-header.md`](docs/troubleshooting/zabbix-apache-authorization-header.md)
+See full post-mortem: `docs/troubleshooting/zabbix-apache-authorization-header.md`
 
 ### Final decision
 
 Zabbix is retained for:
-- Infrastructure monitoring of K3s nodes and monitoring VMs (host groups, triggers, alerting)
-- Complementing Wazuh for infrastructure-level visibility (process monitoring, service checks, SNMP if needed later)
+
+- Host metrics collection via Zabbix agent (see ADR-004)
+- Infrastructure monitoring — host groups, triggers, alerting
+- Complementing Wazuh for infrastructure-level visibility (process monitoring, service checks)
 - Learning value — Zabbix is widely used in enterprise environments
 
 ### Role split
 
-| Tool | Role |
+|Tool|Role|
 |---|---|
-| **Prometheus + node_exporter** | Time-series metrics, NOC dashboards |
-| **Zabbix** | Infrastructure monitoring, triggers, alerting |
-| **Wazuh** | SOC — FIM, brute force detection, CVE scan, SIEM |
-| **Grafana** | Unified visualization (Prometheus + Zabbix datasources) |
+|**Zabbix**|Host metrics + infrastructure monitoring + alerting|
+|**Prometheus**|K8s/application metrics|
+|**Wazuh**|SOC — FIM, brute force detection, CVE scan, SIEM|
+|**Grafana**|Unified visualization (Zabbix + Prometheus datasources)|
 
 ---
 
-## ADR-006 — Ansible for agent/exporter deployment (Phase 5)
+## ADR-006 — Ansible for agent deployment (Phase 5)
 
-**Status:** Decided
+**Status:** Decided (revised)
 
 ### Context
 
-Both Prometheus (node_exporter) and Wazuh (agents) need to be deployed on all 10 monitored VMs. Manual installation on each VM is feasible but not repeatable or scalable.
+Agents need to be deployed on all 10 monitored VMs. Manual installation is not repeatable.
 
 ### Decision
 
-All agent/exporter deployment is deferred to Phase 5 and handled exclusively via Ansible:
-- `node_exporter` on all K3s nodes + monitoring VMs
-- Wazuh agents on all K3s nodes + monitoring VMs
-- Zabbix agents on all K3s nodes + monitoring VMs
+Phase 5 Ansible deploys:
 
-Phase 2 installs only the central servers (Prometheus, Wazuh manager, Zabbix server, Grafana). No agents installed manually.
+- **Zabbix agents** on all K3s nodes + monitoring VMs → host metrics + infra monitoring
+- **Wazuh agents** on all K3s nodes + monitoring VMs → SOC/security
+
+`node_exporter` removed from scope — covered by Zabbix agent (see ADR-004).
 
 ### Why
 
-- **Repeatability** — if a VM is rebuilt, one playbook run restores the full agent stack.
-- **Consistency** — same config on all nodes, no manual drift.
-- **Portfolio value** — Ansible automation across a 10-VM lab is a meaningful demonstration of IaC skills.
+- **Repeatability** — one playbook run restores the full agent stack on any VM
+- **Consistency** — same config across all nodes, no manual drift
+- **Scope reduction** — dropping node_exporter simplifies the playbook without losing any capability
+- **Portfolio value** — Ansible automation across a 10-VM lab demonstrates IaC skills
 
 ### Alternatives rejected
 
-- **Manual install on each VM** — done for the central servers (educational value), not appropriate for repeated per-node tasks.
-- **K3s DaemonSet for node_exporter** — valid approach, but adds K8s complexity to what should be a simple host-level metric collection. Deferred as a potential enhancement post-Phase 6.
+- **Manual install on each VM** — done for central servers (educational value), not appropriate for repeated per-node tasks.
+- **K3s DaemonSet for node_exporter** — valid K8s-native approach, deferred as a potential enhancement post-Phase 6.

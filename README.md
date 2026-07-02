@@ -1,8 +1,8 @@
 # K3s-lab-monitoring
 
-NOC/SOC lab — Monitoring et sécurité d'un cluster K3s HA from scratch.
+NOC/SOC lab — Monitoring and security for a K3s HA cluster, built from scratch.
 
-> Prérequis : [K3s-lab](https://github.com/Souheib-h/K3s-lab) — cluster K3s HA 6 nœuds déjà déployé.
+> Prerequisite: [K3s-lab](https://github.com/Souheib-h/K3s-lab) — 6-node K3s HA cluster already deployed.
 
 ---
 
@@ -19,20 +19,20 @@ k3s-net (10.10.0.0/24)              monitoring-net (10.20.0.0/24)
 └── OPNsense WAN   10.10.0.254 ──── OPNsense LAN 10.20.0.254
 ```
 
-OPNsense joue le rôle de routeur entre les deux réseaux.
+OPNsense routes traffic between the two isolated networks.
 
 ---
 
 ## Stack
 
-| Outil | Rôle |
+|Tool|Role|
 |---|---|
-| **Zabbix** | Monitoring infra — CPU, RAM, Disk, réseau des nodes |
-| **Prometheus** | Métriques K8s — pods, deployments, namespaces |
-| **Grafana** | NOC Dashboard — visualisation Zabbix + Prometheus |
-| **Wazuh** | SOC — SIEM, IDS, File Integrity, CVE scan |
-| **OPNsense** | Routeur/Firewall entre k3s-net et monitoring-net |
-| **Ansible** | Automatisation — déploiement agents sur les nodes |
+|**Zabbix**|Host metrics (CPU, RAM, disk, network) via Zabbix agent + infrastructure alerting|
+|**Prometheus**|K8s/application metrics — pods, deployments, namespaces|
+|**Grafana**|NOC dashboards — unified visualization (Zabbix + Prometheus datasources)|
+|**Wazuh**|SOC — SIEM, FIM, brute force detection, CVE scan|
+|**OPNsense**|Router/firewall between k3s-net and monitoring-net|
+|**Ansible**|Agent deployment automation across all nodes|
 
 ---
 
@@ -40,60 +40,63 @@ OPNsense joue le rôle de routeur entre les deux réseaux.
 
 ```
 NOC → Grafana (http://10.20.0.13:3000)
-      ├── Datasource Zabbix   → santé VMs/nodes
-      └── Datasource Prometheus → pods K8s
+      ├── Datasource Zabbix      → host metrics (VMs/nodes)
+      └── Datasource Prometheus  → K8s pod/deployment metrics
 
 SOC → Wazuh Dashboard (https://10.20.0.11)
-      ├── Alertes sécurité
+      ├── Security alerts
       ├── File Integrity Monitoring
+      ├── Brute force detection
       └── CVE scan
 ```
 
 ---
 
-## Environnement
+## Environment
 
-- **Host** : ThinkPad E14 Gen 5 (i7-13700H, 31GB RAM, 476GB NVMe)
-- **Hyperviseur** : KVM/libvirt sur Arch Linux
-- **OS VMs** : Ubuntu 26.04 LTS Server
+- **Host**: ThinkPad E14 Gen 5 (i7-13700H, 31GB RAM, 476GB NVMe)
+- **Hypervisor**: KVM/libvirt on Arch Linux
+- **VM OS**: Ubuntu 26.04 LTS Server
 
 ---
 
 ## Phases
 
-| Phase | Description | Status |
+|Phase|Description|Status|
 |---|---|---|
-| 0 | Préparation GitHub + structure | ✅ |
-| 1 | Réseau, VMs, OPNsense, routes persistantes | ✅ |
-| 2 | Installation Zabbix, Wazuh, Prometheus, Grafana | 🔄 |
-| 3 | Configuration NOC (Grafana dashboards) | ⏳ |
-| 4 | Configuration SOC (Wazuh rules) | ⏳ |
-| 5 | Ansible — déploiement agents sur les nodes | ⏳ |
-| 6 | Finalisation documentation | ⏳ |
+|0|GitHub setup + repo structure|✅|
+|1|Network, VMs, OPNsense, persistent routes|✅|
+|2|Install Zabbix, Wazuh, Prometheus, Grafana|✅|
+|3|NOC config — Grafana datasources + dashboards|🔄|
+|4|SOC config — Wazuh rules + FIM + CVE|⏳|
+|5|Ansible — agent deployment across all nodes|⏳|
+|6|Documentation finalization|⏳|
 
 ---
 
 ## Documentation
 
-- [01 — Réseau & VMs](docs/01-reseau.md)
-- [02 — Zabbix](docs/02-zabbix.md)
-- [03 — Wazuh](docs/03-wazuh.md)
-- [04 — Prometheus](docs/04-prometheus.md)
-- [05 — Grafana](docs/05-grafana.md)
-- [06 — Ansible](docs/06-ansible.md)
+- 01 — Network & VMs
+- 02 — Zabbix
+- 03 — Wazuh
+- 04 — Prometheus
+- 05 — Grafana
+- 06 — NOC Config
+- Architecture Decisions
+- Troubleshooting
 
 ---
 
-## Démarrage rapide
+## Quick start
 
 ```bash
-# Démarrer le cluster K3s
+# Start the K3s cluster
 k3s-start
 
-# Démarrer le stack monitoring
+# Start the monitoring stack
 monitoring-start
 
-# Arrêter
+# Stop
 k3s-stop
 monitoring-stop
 ```
