@@ -192,31 +192,30 @@ Phase 5 Ansible deploys:
 - **Manual install on each VM** — done for central servers (educational value), not appropriate for repeated per-node tasks.
 - **K3s DaemonSet for node_exporter** — valid K8s-native approach, deferred as a potential enhancement post-Phase 6.
   
-  
-## ADR-007: Prometheus self-monitoring dashboard scoped to process-level only
+## ADR-007 — Prometheus self-monitoring dashboard scoped to process-level only
 
 **Status:** Accepted
-**Context:** Building a custom Grafana dashboard for Prometheus 
-self-monitoring, intended for community reuse.
-**Decision:** Scope strictly to process-level metrics 
-(`process_*`, `go_*`, `prometheus_*`). Host-level metrics (RAM, disk, 
-load) already covered by Zabbix agent on Prometheus-srv (ADR-004).
-**Consequence:** Avoids duplicate monitoring surface. Dashboard 
-description explicitly states scope to prevent user confusion 
-("why no disk usage panel?").
 
-## ADR-008: Classic dashboard schema (v1) chosen over schema v2 for external export
+**Context:**
+Building a custom Grafana dashboard for Prometheus self-monitoring, intended for community reuse.
+
+**Decision:**
+Scope strictly to process-level metrics (`process_*`, `go_*`, `prometheus_*`). Host-level metrics (RAM, disk, load) are already covered by the Zabbix agent on Prometheus-srv (see ADR-004).
+
+**Why:**
+Avoids a duplicate monitoring surface. The dashboard description explicitly states its scope to prevent user confusion ("why no disk usage panel?").
+
+---
+
+## ADR-008 — Classic dashboard schema (v1) chosen over schema v2 for external export
 
 **Status:** Accepted
-**Context:** Grafana 13.1's native dashboard editor defaults to schema 
-v2 (`elements`/`layout`), which requires the experimental 
-`dashboardNewLayouts` feature toggle to import — not enabled on 
-standard instances or on Grafana.com.
-**Decision:** Export dashboards intended for external sharing via the 
-classic REST API (`GET /api/dashboards/uid/<uid>`) rather than the 
-UI's "Export as code," and manually re-add the classic-schema fields 
-required by external validators.
-**Consequence:** Extra manual step per export, but guarantees 
-compatibility with any Grafana instance ≥ 10.x and with Grafana.com's 
-upload validator. Documented in 
-`docs/troubleshooting/grafana-dashboard-schemaV2-export-failure.md`.
+
+**Context:**
+Grafana 13.1's native dashboard editor defaults to schema v2 (`elements`/`layout`), which requires the experimental `dashboardNewLayouts` feature toggle to import — not enabled on standard instances or on Grafana.com.
+
+**Decision:**
+Export dashboards intended for external sharing via the classic REST API (`GET /api/dashboards/uid/<uid>`) rather than the UI's "Export as code," and manually re-add the classic-schema fields required by external validators.
+
+**Why:**
+Extra manual step per export, but guarantees compatibility with any Grafana instance ≥ 10.x and with Grafana.com's upload validator. Documented in `docs/troubleshooting/grafana-dashboard-schemaV2-export-failure.md`.

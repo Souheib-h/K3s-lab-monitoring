@@ -83,10 +83,3 @@ Save & test → **"Zabbix API version 7.4.11"** ✅
 
 ---
 
-## Dashboard imports
-
-Deferred to after Phase 5 (node_exporter deployment via Ansible) — dashboards require actual monitored hosts to display meaningful data.
-
-Planned imports:
-- **Node Exporter Full** (Grafana ID `1860`) — via Prometheus datasource, covers CPU/RAM/disk/network per host
-- **Zabbix dashboards** — via Zabbix datasource, built-in templates available under the Dashboards tab of the datasource config

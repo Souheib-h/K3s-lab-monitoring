@@ -22,14 +22,15 @@ Everything is documented phase by phase, including architecture decisions and tr
 ## Architecture
 
 ```
-  k3s-net (10.10.0.0/24)                    monitoring-net (10.20.0.0/24)
-                                                                          
+  k3s-net (10.10.0.0/24)                    monitoring-net (10.20.0.0/24)                                                            
   K3s-srv-1      10.10.0.11                 Zabbix-srv     10.20.0.10   
   K3s-srv-2      10.10.0.12                 Wazuh-srv      10.20.0.11   
   K3s-srv-3      10.10.0.13                 Prometheus-srv 10.20.0.12   
   K3s-agent-1    10.10.0.31                 Grafana-srv    10.20.0.13   
   K3s-agent-2    10.10.0.32                                              
-  K3s-agent-3    10.10.0.33                                              
+  K3s-agent-3    10.10.0.33  
+  K3s-db         10.10.0.20  
+  Load-srvs      10.10.0.10                                          
   OPNsense WAN   10.10.0.254 ────────────── OPNsense LAN  10.20.0.254  
 ```
 
@@ -39,17 +40,22 @@ The two networks are fully isolated at L2. OPNsense handles all inter-network ro
 
 ## Stack
 
-|Tool|Role|
-|---|---|
-|**Zabbix 7.4**|Host metrics (CPU, RAM, disk, network) via agent + infrastructure alerting|
-|**Prometheus 3.12**|K8s/application metrics — pods, deployments, namespaces|
-|**Grafana 13.1 OSS**|Unified NOC dashboards — Zabbix + Prometheus datasources|
-|**Wazuh 4.14**|SOC — SIEM, FIM, brute force detection, CVE scan|
-|**OPNsense 26.1**|Router/firewall between k3s-net and monitoring-net|
-|**Ansible**|Agent deployment automation (Phase 5)|
+| Tool                 | Role                                                                       |
+| -------------------- | -------------------------------------------------------------------------- |
+| **Zabbix 7.4**       | Host metrics (CPU, RAM, disk, network) via agent + infrastructure alerting |
+| **Prometheus 3.12**  | K8s/application metrics — pods, deployments, namespaces                    |
+| **Grafana 13.1 OSS** | Unified NOC dashboards — Zabbix + Prometheus datasources                   |
+| **Wazuh 4.14**       | SOC — SIEM, FIM, brute force detection, CVE scan                           |
+| **OPNsense 26.1**    | Router/firewall between k3s-net and monitoring-net                         |
+| **Ansible**          | Agent deployment automation (Phase 5)                                      |
 
 ---
 
+## Dashboards
+
+| Dashboard                                                                | Scope                                                                                                                                    |
+| ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| [Prometheus Self-Monitoring](dashboards/prometheus-self-monitoring.json) | Process-level metrics (memory, CPU, TSDB cardinality, query engine health) for the Prometheus server itself — zero external dependencies |
 
 ---
 
@@ -71,25 +77,26 @@ k3s-stop
 
 ## Project status
 
-| Phase | Description | Status |
-|---|---|---|
-| 0 | GitHub setup, repo structure, aliases | ✅ Done |
-| 1 | [Network, VMs, OPNsense, persistent routes](docs/01-network.md) | ✅ Done |
-| 2 | Install [Zabbix](docs/02-zabbix.md) · [Wazuh](docs/03-wazuh.md) · [Prometheus](docs/04-prometheus.md) · [Grafana](docs/05-grafana.md) | ✅ Done |
-| 3 | [NOC config — Grafana datasources + dashboards](docs/06-noc-config.md) | 🔄 In progress |
-| 4 | SOC config — Wazuh FIM, brute force, CVE | ⏳ Pending |
-| 5 | Ansible — agent deployment across all nodes | ⏳ Pending |
-| 6 | Documentation finalization | ⏳ Pending |
+| Phase | Description                                                                                                                           | Status                                          |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| 0     | GitHub setup, repo structure, aliases                                                                                                 | ✅ Done                                          |
+| 1     | [Network, VMs, OPNsense, persistent routes](docs/01-network.md)                                                                       | ✅ Done                                          |
+| 2     | Install [Zabbix](docs/02-zabbix.md) · [Wazuh](docs/03-wazuh.md) · [Prometheus](docs/04-prometheus.md) · [Grafana](docs/05-grafana.md) | ✅ Done                                          |
+| 3     | [NOC config — Grafana datasources + dashboards](docs/06-noc-config.md)                                                                | 🔄 In progress : Cluster View dashboard pending |
+| 4     | SOC config — Wazuh FIM, brute force, CVE                                                                                              | ⏳ Pending                                       |
+| 5     | Ansible — agent deployment across all nodes                                                                                           | ⏳ Pending                                       |
+| 6     | Documentation finalization                                                                                                            | ⏳ Pending                                       |
+| 7     | [Prometheus self-monitoring dashboard](docs/07-prometheus-self-monitoring-dashboard.md)                                               | ✅ Done                                          |
 
 ---
 
-
 ### Reference
 
-|Doc|Description|
-|---|---|
-|Architecture Decisions|Why this stack, why these choices — full ADR|
-|Troubleshooting: Zabbix Apache auth|Post-mortem — Apache stripping Authorization header to PHP-FPM|
+| Doc                                                                                                            | Description                                                                                  |
+| -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| [Architecture Decisions](DECISIONS.md)                                                                         | Why this stack, why these choices — full ADR                                                 |
+| [Troubleshooting: Zabbix Apache auth](docs/troubleshooting/zabbix-apache-authorization-header.md)              | Post-mortem — Apache stripping Authorization header to PHP-FPM                               |
+| [Troubleshooting: Grafana schema v2 export](docs/troubleshooting/grafana-dashboard-schemaV2-export-failure.md) | Post-mortem — why the native "Export as code" flow produces an incompatible dashboard schema |
 
 ---
 
