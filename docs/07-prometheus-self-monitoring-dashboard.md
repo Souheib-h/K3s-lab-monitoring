@@ -75,13 +75,50 @@ panel to watch first during incident triage.
   `LimitNOFILE` (500K+) on modern Ubuntu — the ratio is meaningless 
   against an oversized limit. Switched to raw value display.
 
-## Publication attempt — Grafana.com
+## Publication — Grafana.com
 
-Attempted public marketplace publication. Blocked at the export stage 
-due to a schema v2 incompatibility — full root cause in 
-`docs/troubleshooting/grafana-dashboard-schemaV2-export-failure.md`.
+**Dashboard ID: [25537](https://grafana.com/grafana/dashboards/25537)**
 
-**Status: paused, not abandoned.** Dashboard is fully functional and 
-validated via local Docker import. JSON preserved in `dashboards/` for 
-internal use and future retry once tooling around schema v2 external 
-export stabilizes.
+### Blocker: schema v2 export incompatibility
+
+Grafana 13.1's native "Export as code" flow produces a dashboard using 
+the internal schema v2 (`elements`/`layout`), which requires an 
+experimental feature toggle not enabled on any standard Grafana 
+instance — including Grafana.com's own importer. Full root cause and 
+fix path documented in 
+[`docs/troubleshooting/grafana-dashboard-schemaV2-export-failure.md`](troubleshooting/grafana-dashboard-schemaV2-export-failure.md).
+
+### Fix summary
+
+1. Pulled the dashboard via the classic REST API 
+   (`GET /api/dashboards/uid/<uid>`) instead of the UI export — returns 
+   the legacy `panels[]` schema regardless of what the instance uses 
+   internally.
+2. Re-added fields the stripped-down export omits but that Grafana.com's 
+   upload validator requires: `id: null`, `gnetId: null`, `tags: []`, 
+   `links: []`, `__elements: {}`, and a complete `__requires` block 
+   (grafana core + datasource + every panel type used).
+3. Templated the datasource UID (`"uid": "${DS_PROMETHEUS}"`) with a 
+   matching `templating.list` entry so any Grafana instance prompts for 
+   a Prometheus datasource on import.
+
+The missing `id: null` field was specifically the cause of Grafana.com's 
+first rejection ("Old dashboard JSON format") — the validator treats its 
+absence, not its `null` value, as an old-format signal.
+
+### Listing
+
+- **Title:** Prometheus Self-Monitoring
+- **Category:** Templates
+- **Short description:** Process-level self-monitoring for Prometheus. 
+  Zero external dependencies — no node_exporter required.
+- **Datasource:** Prometheus (job label must be `prometheus`, or the 
+  panel queries need adjusting on import)
+
+![Dashboard live on Grafana.com](img/garfana-prometheus-new-dashbord-slef-monitoring-on-grafana-dashbord.png)
+
+### Status
+
+**Published.** Anyone can import via `Dashboards → Import → 25537` and 
+select their Prometheus datasource. JSON kept in `dashboards/` for 
+local reference and version tracking alongside the repo.

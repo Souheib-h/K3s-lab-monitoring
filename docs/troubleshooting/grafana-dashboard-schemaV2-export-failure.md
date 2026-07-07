@@ -30,7 +30,7 @@ to build a public deliverable on top of.
    (`GET /api/dashboards/uid/<uid>`), which returns the legacy 
    `panels[]` schema regardless of internal storage format.
 2. Manually re-added the fields the classic schema (and Grafana.com's 
-   upload validator) expect but that a stripped-down export omits:
+   upload validator) expect but that a stripped-down export omits: 
    `id: null`, `gnetId: null`, `tags: []`, `links: []`, `__elements: {}`.
 3. `__requires` needs a complete list (grafana core + datasource + 
    every panel type used — `stat`, `timeseries`, etc.), not just the 
@@ -49,6 +49,10 @@ setting it to `null`) triggers the "old format" rejection path,
 somewhat counterintuitively since `null` is normally treated as 
 "absent" in most JSON tooling.
 
+Applying the fix (re-adding `id: null` explicitly, along with the other 
+missing fields listed above) resolved the rejection — the dashboard was 
+accepted and assigned public ID `25537`.
+
 ## Lesson
 
 Don't trust "Export as code" from the Grafana 13.x UI at face value for 
@@ -61,7 +65,8 @@ via the classic REST API instead and hand-verify the field set above.
 
 ## Status
 
-Publication paused. Dashboard fully functional and validated on local 
-Docker import. `dashboards/prometheus-self-monitoring.json` kept in 
-repo for reference / retry once schema v2 tooling stabilizes, or once 
-Grafana.com's importer explicitly supports it.
+**Resolved.** Dashboard published on Grafana.com as 
+[dashboard 25537](https://grafana.com/grafana/dashboards/25537). 
+`dashboards/prometheus-self-monitoring.json` kept in the repo, 
+templated version, for reference and version tracking alongside any 
+future updates.
