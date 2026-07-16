@@ -219,3 +219,72 @@ Export dashboards intended for external sharing via the classic REST API (`GET /
 
 **Why:**
 Extra manual step per export, but guarantees compatibility with any Grafana instance ≥ 10.x and with Grafana.com's upload validator. Documented in `docs/troubleshooting/grafana-dashboard-schemaV2-export-failure.md`.
+
+## ADR-009 — Ubuntu 26.04 for the Wazuh VM (forced pre-.1 upgrade)
+
+**Status:** Accepted
+
+### Context
+
+The Wazuh SOC was initially built on Ubuntu 24.04. During Phase 4, a persistent Vulnerability Detection failure triggered a long investigation across several reinstalls. To eliminate the OS as a variable — and because an earlier working Wazuh deployment had run on Ubuntu 26.04 — the Wazuh VM was migrated from 24.04 to 26.04 ("Resolute Raccoon").
+
+At the time (July 2026), the LTS→LTS upgrade path was not yet open through the standard `do-release-upgrade` channel: 26.04.1, the first point release that normally unlocks the upgrade, had not shipped. The upgrade was forced with `do-release-upgrade -d`.
+
+The VD failure was ultimately unrelated to the OS — the root cause was the `disable_scan_manager` internal option (see `docs/troubleshooting/wazuh-soc-troubleshooting.md`, TS-1).
+
+### Decision
+
+Keep the Wazuh VM on Ubuntu 26.04, upgraded in place via `do-release-upgrade -d`.
+
+### Why
+
+- **Rules out the OS variable** — the migration removed any doubt that the OS was involved in the VD failure, letting the investigation converge on the real cause.
+- **Matches the earlier working reference** — the previous successful Wazuh deployment ran on 26.04, so staying on it keeps parity with a known-good environment.
+- **Acceptable for a lab** — the Wazuh installer flags 26.04 as outside its recommended systems list, but the deployment runs correctly and the risk is contained to a lab.
+
+### Alternatives rejected
+
+- **Stay on 24.04** — abandoned mid-investigation to eliminate the OS as a variable.
+- **Fresh 26.04 VM from ISO** — cleaner, but slower than an in-place upgrade; the in-place path was chosen to reuse the existing network/identity config.
+- **Wait for 26.04.1** — would have blocked progress for weeks; the forced `-d` upgrade was accepted instead.
+
+### Consequences
+
+- The VM runs an OS newer than Wazuh officially recommends — fine for a lab, would warrant caution in production.
+- Forcing the upgrade before the .1 point release means the VM missed the first batch of post-release fixes. No issues observed in practice.
+- The two kernel images left by the release upgrade account for a large share of the CVE findings; removing the old kernel clears them.
+
+---
+
+## ADR-010 — Freeze Wazuh at version 4.14.6
+
+**Status:** Accepted
+
+### Context
+
+Phase 4 was destabilised in part by version churn during troubleshooting — a partial downgrade to 4.14.5 left a manager/indexer version mismatch. A routine `apt upgrade` pulling a new Wazuh release could silently break a working SOC, a risk the official quickstart documentation explicitly warns about.
+
+### Decision
+
+Pin the deployment to Wazuh 4.14.6. Immediately after a successful install:
+
+- disable the Wazuh apt repository — `sed -i 's/^deb/#deb/' /etc/apt/sources.list.d/wazuh.list`
+- disable update notifications in the dashboard (Server APIs → *Disable updates notifications*)
+
+Upgrades become a deliberate, tested action rather than a side effect of routine maintenance.
+
+### Why
+
+- **Protects a validated deployment** — the entire SOC (VD, FIM, active response) goes offline if the manager fails to start after an upgrade. Freezing removes that class of accident.
+- **Version consistency** — pins manager, indexer, and dashboard to the same release, avoiding the mismatch that caused problems during troubleshooting.
+- **Aligns with vendor guidance** — the Wazuh quickstart explicitly recommends disabling the repository after install.
+
+### Alternatives rejected
+
+- **Leave the repository enabled** — convenient for updates, but exposes the SOC to accidental breakage on any `apt upgrade`.
+- **Auto-update** — unacceptable for infrastructure where an upgrade can take the whole SOC down without warning.
+
+### Consequences
+
+- The SOC will not receive Wazuh security/feature updates automatically; any upgrade must be planned, tested, and the repository re-enabled explicitly.
+- This freeze must be revisited before any future Wazuh 5.x migration.
