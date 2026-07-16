@@ -259,7 +259,10 @@ Alerts appear in **File Integrity Monitoring → Events** (rules 554 added / 550
 
 ![FIM realtime alerting enabled](img/FIM-allerting-on.png)
 
+
 ![FIM realtime events working in the dashboard](img/FIM-Fonctionnel.png)
+
+![](img/FIM-In-realtime.png)
 
 ### 5.1 VirusTotal integration
 
@@ -304,6 +307,8 @@ sudo grep -iE "virustotal|87105" /var/ossec/logs/alerts/alerts.json | tail -3
 ```
 
 In the UI: Threat Hunting → `rule.id: 87105`.
+
+![](img/87105.png)
 
 ---
 
