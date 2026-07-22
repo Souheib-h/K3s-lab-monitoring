@@ -64,11 +64,10 @@ This enables the Apache conf that passes the `Authorization` header through to P
 
 See full post-mortem: [`docs/troubleshooting/zabbix-apache-authorization-header.md`](../troubleshooting/zabbix-apache-authorization-header.md)
 
+![Add Zabbix datasource](img/grafana-zabbix-datasource-add.png)
 ### 4. Configure the datasource
 
 **Connections → Add new data source → Zabbix**
-
-![Add Zabbix datasource](img/grafana-zabbix-datasource-add.png)
 
 
 ```
@@ -85,23 +84,3 @@ Save & test → **"Zabbix API version 7.4.11"** ✅
 
 ---
 
-
-### 5. Direct DB connection (trends)
-
-The Zabbix plugin can read trend data straight from the Zabbix MySQL database, offloading long-range queries from the API. A dedicated read-only MySQL user is created and bound to the datasource:
-
-![MySQL user creation and grant](img/grafana-mysql-user-creation.png)
-
-![Adding the MySQL datasource](img/grafana-zabbix-mysql-datasource-adding.png)
-
-![MySQL datasource connected](img/grafana-zabbix-mysql-datasource-done.png)
-
----
-
-## Result
-
-![NOC overview](img/noc-overview.png)
-
-![Node drill-down view](img/node-view.png)
-
-![Capacity & trends view](img/capacity-trends-view.png)

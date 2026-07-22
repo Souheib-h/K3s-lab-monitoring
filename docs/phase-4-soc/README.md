@@ -20,7 +20,6 @@ Configuration lives in `/var/ossec/etc/ossec.conf` and `/var/ossec/etc/local_int
 ---
 
 
-![Security events overview](img/soc-security-events-view.png)
 
 ## 1. Post-install steps (required, in this order)
 
@@ -90,7 +89,7 @@ The first download is heavy and **must complete uninterrupted**: restarting the 
 
 ![Feed update initiating](img/wazuh-vd-feed-initiating.png)
 
-![Feed update completed](img/wazuh-vd-feed-completed.png)
+
 
 Monitor without intervening:
 

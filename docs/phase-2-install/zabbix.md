@@ -109,4 +109,3 @@ Default credentials: `Admin` / `zabbix`
 - Dashboard reachable at `http://10.20.0.10/zabbix`
 
 
-![Zabbix monitoring dashboard, host view](img/zabbix-monitoring-dashboard-host.png)

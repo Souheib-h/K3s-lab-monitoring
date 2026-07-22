@@ -21,7 +21,7 @@ The control node manages itself through `ansible_connection: local`.
 SSH/Python target) and the hypervisor (trust hierarchy: the control node must
 not hold root on its own host) are intentionally outside Ansible's perimeter.
 
-![Ansible inventory graph](img/ansible-inventory-graph.png)
+
 
 ## 2. Prerequisites
 
@@ -111,7 +111,11 @@ playbook drives the Zabbix API through the `community.zabbix` collection v3
 Result: 15 hosts green in Monitoring → Hosts (13 managed + hypervisor + Zabbix
 server itself).
 
+**Zabbix agents** ✅ 
+
 ![Zabbix, all hosts ZBX green](img/zabbix-hosts-all-green.png)
+
+**Wazuh agents** ✅  
 
 ![Wazuh, 12 agents active](img/wazuh-agents-12-active.png)
 

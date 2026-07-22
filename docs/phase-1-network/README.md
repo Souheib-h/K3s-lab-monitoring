@@ -24,7 +24,7 @@ monitoring-net (10.20.0.0/24), NAT
 
 ---
 
-![Lab network overview](img/network-views.png)
+
 
 ## Creating the monitoring-net network
 
