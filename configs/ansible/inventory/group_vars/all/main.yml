@@ -1,0 +1,4 @@
+zabbix_server_ip: 10.20.0.10
+wazuh_manager_ip: 10.20.0.11
+wazuh_version: "4.14.*"        # ADR-010 — freeze 4.14.x
+

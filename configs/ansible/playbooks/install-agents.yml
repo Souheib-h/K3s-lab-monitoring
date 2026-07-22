@@ -1,0 +1,132 @@
+---
+# ============================================================
+# Play 1 — Zabbix agent
+# ============================================================
+- name: Install Zabbix agent
+  hosts: zabbix_agent_targets
+  become: true
+  vars:
+    zabbix_service: "{{ 'zabbix-agentd' if ansible_os_family == 'Alpine' else 'zabbix-agent' }}"
+
+  tasks:
+    - name: Install zabbix-agent (Ubuntu)
+      when: ansible_os_family == "Debian"
+      block:
+        - name: Add Zabbix official repository
+          ansible.builtin.apt:
+            deb: "https://repo.zabbix.com/zabbix/7.4/release/ubuntu/pool/main/z/zabbix-release/zabbix-release_latest_7.4+ubuntu24.04_all.deb"
+
+        - name: Install package
+          ansible.builtin.apt:
+            name: zabbix-agent
+            state: present
+            update_cache: true
+
+    - name: Install zabbix-agent (Alpine)
+      community.general.apk:
+        name: zabbix-agent
+        state: present
+        update_cache: true
+      when: ansible_os_family == "Alpine"
+
+    - name: Configure agent (Server, ServerActive, Hostname)
+      ansible.builtin.lineinfile:
+        path: /etc/zabbix/zabbix_agentd.conf
+        regexp: "^{{ item.key }}="
+        line: "{{ item.key }}={{ item.value }}"
+      loop:
+        - { key: Server,       value: "{{ zabbix_server_ip }}" }
+        - { key: ServerActive, value: "{{ zabbix_server_ip }}" }
+        - { key: Hostname,     value: "{{ inventory_hostname }}" }
+      notify: Restart zabbix-agent
+
+    - name: Enable and start zabbix-agent
+      ansible.builtin.service:
+        name: "{{ zabbix_service }}"
+        state: started
+        enabled: true
+
+  handlers:
+    - name: Restart zabbix-agent
+      ansible.builtin.service:
+        name: "{{ zabbix_service }}"
+        state: restarted
+
+# ============================================================
+# Play 2 — Wazuh agent
+# ============================================================
+- name: Install Wazuh agent
+  hosts: wazuh_agent_targets
+  become: true
+
+  tasks:
+    - name: Install wazuh-agent (Ubuntu — pinned 4.14, ADR-010)
+      when: ansible_os_family == "Debian"
+      block:
+        - name: Add Wazuh GPG key
+          ansible.builtin.get_url:
+            url: https://packages.wazuh.com/key/GPG-KEY-WAZUH
+            dest: /usr/share/keyrings/wazuh.gpg.asc
+            mode: "0644"
+
+        - name: Add Wazuh repository
+          ansible.builtin.apt_repository:
+            repo: "deb [signed-by=/usr/share/keyrings/wazuh.gpg.asc] https://packages.wazuh.com/4.x/apt/ stable main"
+            state: present
+
+        - name: Install package (WAZUH_MANAGER consumed by postinst)
+          ansible.builtin.apt:
+            name: "wazuh-agent={{ wazuh_version }}"
+            state: present
+            update_cache: true
+          environment:
+            WAZUH_MANAGER: "{{ wazuh_manager_ip }}"
+
+        - name: Hold package version
+          ansible.builtin.dpkg_selections:
+            name: wazuh-agent
+            selection: hold
+
+        - name: Enable and start service
+          ansible.builtin.service:
+            name: wazuh-agent
+            state: started
+            enabled: true
+
+    - name: Install wazuh-agent (Alpine — no env support, no packaged init)
+      when: ansible_os_family == "Alpine"
+      block:
+        - name: Add Wazuh apk repository
+          ansible.builtin.lineinfile:
+            path: /etc/apk/repositories
+            line: "https://packages.wazuh.com/4.x/alpine/v3.12/main"
+
+        - name: Add Wazuh apk key
+          ansible.builtin.get_url:
+            url: https://packages.wazuh.com/key/alpine-devel%40wazuh.com-633d7457.rsa.pub
+            dest: /etc/apk/keys/alpine-devel@wazuh.com-633d7457.rsa.pub
+            mode: "0644"
+
+        - name: Install package
+          community.general.apk:
+            name: wazuh-agent
+            state: present
+            update_cache: true
+
+        - name: Configure manager IP
+          ansible.builtin.replace:
+            path: /var/ossec/etc/ossec.conf
+            regexp: "<address>MANAGER_IP</address>"
+            replace: "<address>{{ wazuh_manager_ip }}</address>"
+
+        - name: Deploy OpenRC init script
+          ansible.builtin.copy:
+            src: ../files/wazuh-agentd.initd
+            dest: /etc/init.d/wazuh-agentd
+            mode: "0755"
+
+        - name: Enable and start service
+          ansible.builtin.service:
+            name: wazuh-agentd
+            state: started
+            enabled: true

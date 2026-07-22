@@ -1,0 +1,38 @@
+---
+- name: Register all hosts in Zabbix server
+  hosts: zabbix-srv
+  gather_facts: false
+
+  vars:
+    ansible_network_os: community.zabbix.zabbix
+    ansible_connection: httpapi
+    ansible_httpapi_port: 80
+    ansible_httpapi_use_ssl: false
+    ansible_zabbix_url_path: zabbix
+    ansible_zabbix_auth_key: "{{ zabbix_api_token }}"
+
+  tasks:
+    - name: Ensure host groups exist
+      community.zabbix.zabbix_group:
+        host_groups:
+          - K3s cluster
+          - Monitoring stack
+        state: present
+
+    - name: Create/update host in Zabbix
+      community.zabbix.zabbix_host:
+        host_name: "{{ item }}"
+        visible_name: "{{ item }}"
+        host_groups:
+          - "{{ 'K3s cluster' if item in groups['k3s_nodes'] else 'Monitoring stack' }}"
+        link_templates:
+          - Linux by Zabbix agent active
+        status: enabled
+        interfaces:
+          - type: agent
+            main: 1
+            useip: 1
+            ip: "{{ hostvars[item].ansible_host }}"
+            port: "10050"
+        state: present
+      loop: "{{ groups['zabbix_agent_targets'] }}"

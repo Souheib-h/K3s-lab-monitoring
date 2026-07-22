@@ -1,0 +1,30 @@
+#!/sbin/openrc-run
+
+description="Wazuh agent"
+command="/var/ossec/bin/wazuh-control"
+
+depend() {
+    need net
+    after firewall
+}
+
+start() {
+    ebegin "Starting wazuh-agent"
+    /var/ossec/bin/wazuh-control start
+    eend $?
+}
+
+stop() {
+    ebegin "Stopping wazuh-agent"
+    /var/ossec/bin/wazuh-control stop
+    eend $?
+}
+status() {
+    if /var/ossec/bin/wazuh-control status | grep -q "wazuh-agentd is running"; then
+        einfo "wazuh-agent is running"
+        return 0
+    else
+        eerror "wazuh-agent is stopped"
+        return 1
+    fi
+}
