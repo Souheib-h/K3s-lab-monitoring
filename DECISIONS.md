@@ -345,3 +345,32 @@ build exists. The two Alpine hosts (load-srv, ansible-srv) therefore run
 agent 4.8.2 against the 4.14 manager: protocol-compatible, flagged "outdated"
 in the dashboard, and **excluded from Vulnerability Detection scans**. Accepted
 as-is; revisit if Wazuh publishes newer Alpine builds.
+
+---
+
+## ADR-013: Replace OPNsense with FortiGate VM
+
+**Status:** In progress
+
+### Context
+
+OPNsense has served as the inter-network router since Phase 1 (see ADR-002). FortiGate is more widely used in enterprise and government-adjacent environments (relevant to this project's target role), and Fortinet now offers a permanent evaluation license for KVM deployments, removing the earlier licensing objection.
+
+### Decision
+
+Replace the OPNsense VM with a FortiGate-VM, keeping the same IPs (WAN 10.10.0.254, LAN 10.20.0.254) and the same routing behavior, so no downstream host needs reconfiguration.
+
+### Why
+
+- Broader enterprise relevance than OPNsense for portfolio purposes.
+- Permanent evaluation license removes the cost barrier for a lab.
+- IP/route parity means the cutover is isolated to the router itself.
+
+### Alternatives rejected
+
+- **Keep OPNsense** — works fine, but FortiGate experience has more weight for the target role.
+- **Time-limited FortiGate trial** — rejected once the permanent evaluation license was confirmed available for KVM/private cloud.
+
+### Risk noted
+
+FortiGate's NAT/policy model differs from OPNsense's outbound NAT toggle. The same asymmetric-routing failure mode hit with libvirt's `LIBVIRT_PRT` masquerade chain (ADR-002) is expected to resurface here and must be checked explicitly during cutover.
