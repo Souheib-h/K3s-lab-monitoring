@@ -1,4 +1,4 @@
-# Phase 2 — Zabbix Server Installation
+# Phase 2: Zabbix Server Installation
 
 **VM:** Zabbix-srv (10.20.0.10)
 **OS:** Ubuntu 26.04 "Resolute"
@@ -20,7 +20,7 @@ apt update
 apt install zabbix-server-mysql zabbix-frontend-php zabbix-apache-conf zabbix-sql-scripts zabbix-agent -y
 ```
 
-> Note: this does **not** pull `mysql-server` automatically — only client libs as a dependency. Install it explicitly:
+> Note: this does **not** pull `mysql-server` automatically, only client libs as a dependency. Install it explicitly:
 
 ```bash
 apt install mysql-server -y
@@ -95,16 +95,18 @@ Navigate to `http://10.20.0.10/zabbix/setup.php`.
 
 Default credentials: `Admin` / `zabbix`
 
-> Kept default for this lab session — flagged for change before any exposure beyond `monitoring-net`.
+> Kept default for this lab session, flagged for change before any exposure beyond `monitoring-net`.
 
 ![Zabbix dashboard after setup](img/zabbix-congrat-page.png)
 
 ![Zabbix installation complete](img/zabbix-done.png)
 
-> **Note:** If the Grafana-Zabbix plugin returns `"Not authorized"` despite correct credentials, the Apache `php8.5-fpm` conf may not be enabled. See [`docs/troubleshooting/zabbix-apache-authorization-header.md`](troubleshooting/zabbix-apache-authorization-header.md).
+> **Note:** If the Grafana-Zabbix plugin returns `"Not authorized"` despite correct credentials, the Apache `php8.5-fpm` conf may not be enabled. See [`docs/troubleshooting/zabbix-apache-authorization-header.md`](../troubleshooting/zabbix-apache-authorization-header.md).
 ## Result
 
 - Zabbix server running, self-monitoring active (1 host: "Zabbix server")
 - 360 templates loaded, 135 items, 78 triggers imported with default schema
 - Dashboard reachable at `http://10.20.0.10/zabbix`
 
+
+![Zabbix monitoring dashboard, host view](img/zabbix-monitoring-dashboard-host.png)

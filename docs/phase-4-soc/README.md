@@ -1,6 +1,6 @@
-# 08 — SOC Configuration (Wazuh)
+# 08: SOC Configuration (Wazuh)
 
-This document is the reference procedure for configuring the SOC layer of the lab, from a fresh Wazuh install (see [03-wazuh.md](03-wazuh.md)) to a fully working SOC. It only describes the clean path. Every issue encountered while building this procedure is documented separately in [troubleshooting/wazuh-soc-troubleshooting.md](troubleshooting/wazuh-soc-troubleshooting.md) — referenced inline as `[TS-x]`.
+This document is the reference procedure for configuring the SOC layer of the lab, from a fresh Wazuh install (see [03-wazuh.md](../phase-2-install/wazuh.md)) to a fully working SOC. It only describes the clean path. Every issue encountered while building this procedure is documented separately in [troubleshooting/wazuh-soc-troubleshooting.md](../troubleshooting/wazuh-soc-troubleshooting.md), referenced inline as `[TS-x]`.
 
 Environment: Wazuh 4.14.6 all-in-one on Ubuntu 26.04 LTS (`10.20.0.11`). The installation assistant flags Ubuntu 26.04 as outside its recommended systems list; the deployment works and this is an accepted risk.
 
@@ -8,17 +8,19 @@ Environment: Wazuh 4.14.6 all-in-one on Ubuntu 26.04 LTS (`10.20.0.11`). The ins
 
 | Capability | Scope | Status |
 |---|---|---|
-| Vulnerability Detection | Full host CVE scan via CTI feed | Operational — 2,900 findings |
+| Vulnerability Detection | Full host CVE scan via CTI feed | Operational: 2,900 findings |
 | Active Response | SSH brute force → firewall drop | Tested in real conditions |
-| Email Alerting | Alerts level ≥ 10 → Gmail via local Postfix relay | Tested — delivery confirmed |
+| Email Alerting | Alerts level ≥ 10 → Gmail via local Postfix relay | Tested: delivery confirmed |
 | File Integrity Monitoring (FIM) | Stack config paths + sandbox, realtime | Tested |
-| VirusTotal integration | FIM events → VirusTotal hash lookup | Tested — EICAR flagged 60/66 |
+| VirusTotal integration | FIM events → VirusTotal hash lookup | Tested: EICAR flagged 60/66 |
 | SCA / MITRE ATT&CK / Compliance | Active by default | Active |
 
 Configuration lives in `/var/ossec/etc/ossec.conf` and `/var/ossec/etc/local_internal_options.conf` on the manager. Fleet-wide agent deployment is Phase 5 (Ansible, ADR-006).
 
 ---
 
+
+![Security events overview](img/soc-security-events-view.png)
 
 ## 1. Post-install steps (required, in this order)
 
@@ -44,9 +46,9 @@ sudo systemctl restart wazuh-manager
 sudo grep "indexer-connector" /var/ossec/logs/ossec.log | tail -5
 ```
 
-This restart also applies the option from 1.1 — the log confirms it:
+This restart also applies the option from 1.1; the log confirms it:
 
-![Policy change picked up — manager re-scan scheduled](img/wazuh-vd-policy-rescan-manager.png)
+![Policy change picked up, manager re-scan scheduled](img/wazuh-vd-policy-rescan-manager.png)
 
 ### 1.3 Freeze the Wazuh repository
 
@@ -76,14 +78,14 @@ Enabled by default in `ossec.conf`:
 
 ### The first feed cycle
 
-The first download is heavy and **must complete uninterrupted** — restarting the manager mid-cycle corrupts the feed state `[TS-3]`. A normal cycle:
+The first download is heavy and **must complete uninterrupted**: restarting the manager mid-cycle corrupts the feed state `[TS-3]`. A normal cycle:
 
 | Marker | Expected value |
 |---|---|
 | Start | `Initiating update feed process.` |
 | Duration | ~15–30 minutes |
 | Peak size of `vd_updater/` | ~1 GB (download) then ~4.5 GB (ingestion) |
-| Size at rest | ~40 MB (compacted) — normal, not a failure |
+| Size at rest | ~40 MB (compacted): normal, not a failure |
 | End | `Feed update process completed.` + `Triggered a re-scan after content update.` |
 
 ![Feed update initiating](img/wazuh-vd-feed-initiating.png)
@@ -106,7 +108,7 @@ curl -k -u admin:'<ADMIN_PASSWORD>' "https://localhost:9200/wazuh-states-vulnera
 
 This host: **2,900 findings** across all severities.
 
-![Vulnerability Detection dashboard](img/Vulnerability-detection-dashbord.png)
+![Vulnerability Detection dashboard](img/vulnerability-detection-dashboard.png)
 
 ### Remediation
 
@@ -114,17 +116,17 @@ Filter by severity, patch the package, and the next scan clears the finding. On 
 
 ---
 
-## 3. Active Response — SSH brute force
+## 3. Active Response: SSH brute force
 
 Repeated SSH authentication failures trigger an automatic firewall drop of the source IP.
 
 | Rule ID | Meaning |
 |---|---|
-| 5712 | SSHD brute force — multiple authentication failures |
+| 5712 | SSHD brute force: multiple authentication failures |
 | 5720 | Multiple SSHD authentication failures (aggregated) |
 | 5763 | SSHD brute force variant |
 
-In `ossec.conf` — the block must sit **outside** the XML comment wrapping the default placeholder `[TS-4]`:
+In `ossec.conf`, the block must sit **outside** the XML comment wrapping the default placeholder `[TS-4]`:
 
 ```xml
 <active-response>
@@ -137,18 +139,18 @@ In `ossec.conf` — the block must sit **outside** the XML comment wrapping the 
 ```
 
 - `firewall-drop` ships with Wazuh and inserts an iptables DROP rule for the offending IP.
-- `location: local` — the response runs on the host that raised the alert. Fleet-wide coverage comes with Phase 5 agents.
-- `timeout: 600` — the ban lifts after 10 minutes.
+- `location: local`: the response runs on the host that raised the alert. Fleet-wide coverage comes with Phase 5 agents.
+- `timeout: 600`: the ban lifts after 10 minutes.
 
 ```bash
 sudo systemctl restart wazuh-manager
 ```
 
-### Validation — tested in real conditions
+### Validation: tested in real conditions
 
 An SSH brute force launched from another VM (`10.20.0.253`) completed the full loop automatically: detection from journald logs → rule match → `firewall-drop` executed against the attacker.
 
-![Active response triggered by a real SSH brute force](img/wazuh-active-response-active-nd-working.png)
+![Active response triggered by a real SSH brute force](img/wazuh-active-response-working.png)
 
 ```bash
 sudo tail -20 /var/ossec/logs/active-responses.log
@@ -201,7 +203,7 @@ echo "relay test" | mail -s "Postfix relay test" <your-address>@gmail.com
 
 ### Wazuh side
 
-In the `<global>` section of `ossec.conf` — double-check the recipient address for typos, a wrong domain fails silently at the relay `[TS-5]`:
+In the `<global>` section of `ossec.conf`, double-check the recipient address for typos; a wrong domain fails silently at the relay `[TS-5]`:
 
 ```xml
 <email_notification>yes</email_notification>
@@ -221,9 +223,9 @@ Threshold in the `<alerts>` section:
 sudo systemctl restart wazuh-manager
 ```
 
-### Validation — delivery confirmed
+### Validation: delivery confirmed
 
-![Email alert delivered to Gmail](img/teste-envoi-au-mail-reussi.png)
+![Email alert delivered to Gmail](img/email-alert-test-success.png)
 
 ---
 
@@ -240,7 +242,7 @@ In the `<syscheck>` block, after the default `<directories>` entries:
 <directories realtime="yes" check_all="yes">/root/malware-test</directories>
 ```
 
-`check_all="yes"` on the sandbox is required so FIM computes file hashes — the VirusTotal integration needs the hash to query.
+`check_all="yes"` on the sandbox is required so FIM computes file hashes, the VirusTotal integration needs the hash to query.
 
 > A realtime watch is placed only on directories that **exist at the time syscheck starts**. If you create a monitored directory after the last restart, restart the manager once so the watch is registered `[TS-6]`.
 
@@ -255,14 +257,14 @@ sudo grep -i "real-time" /var/ossec/logs/ossec.log | tail -3
 sudo touch /var/ossec/etc/fim-test && sudo rm /var/ossec/etc/fim-test
 ```
 
-Alerts appear in **File Integrity Monitoring → Events** (rules 554 added / 550 modified / 553 deleted), with full forensic detail — mode realtime, before/after MD5/SHA1/SHA256.
+Alerts appear in **File Integrity Monitoring → Events** (rules 554 added / 550 modified / 553 deleted), with full forensic detail, mode realtime, before/after MD5/SHA1/SHA256.
 
-![FIM realtime alerting enabled](img/FIM-allerting-on.png)
+![FIM realtime alerting enabled](img/fim-alerting-on.png)
 
 
-![FIM realtime events working in the dashboard](img/FIM-Fonctionnel.png)
+![FIM realtime events working in the dashboard](img/fim-functional.png)
 
-![](img/FIM-In-realtime.png)
+![](img/fim-realtime.png)
 
 ### 5.1 VirusTotal integration
 
@@ -272,9 +274,9 @@ Each FIM event on a monitored file sends its SHA256 to the VirusTotal API, which
 FIM (syscheck) ──SHA256──▶ integratord ──API──▶ VirusTotal ──▶ enriched alert (rule 87105)
 ```
 
-**API key.** Create a free VirusTotal account (500 requests/day, 4/min) and copy the API key from the account profile. The key lives only in `ossec.conf` on the VM — never commit it. In this repo it is shown as a placeholder.
+**API key.** Create a free VirusTotal account (500 requests/day, 4/min) and copy the API key from the account profile. The key lives only in `ossec.conf` on the VM, never commit it. In this repo it is shown as a placeholder.
 
-**Configuration.** As a direct child of `<ossec_config>` (sibling of `<syscheck>`, **not** inside it — a misplaced block prevents the manager from starting `[TS-7]`):
+**Configuration.** As a direct child of `<ossec_config>` (sibling of `<syscheck>`, **not** inside it, a misplaced block prevents the manager from starting `[TS-7]`):
 
 ```xml
 <integration>
@@ -291,7 +293,7 @@ sudo /var/ossec/bin/wazuh-control status | grep integrator   # must be running
 sudo grep -i "Enabling integration for: 'virustotal'" /var/ossec/logs/ossec.log | tail -1
 ```
 
-**Validation with EICAR** — the standard antivirus test file, harmless, recognised by every engine. Copy the string exactly:
+**Validation with EICAR**: the standard antivirus test file, harmless, recognised by every engine. Copy the string exactly:
 
 ```bash
 sudo mkdir -p /root/malware-test
@@ -300,7 +302,7 @@ echo 'X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*' | su
 
 Within ~60 seconds the chain fires: FIM detects the new file → VirusTotal is queried → rule 87105 raises a level-12 alert. On this host, EICAR was flagged by **60 of 66 engines**, with a clickable link to the VirusTotal report in the alert.
 
-![VirusTotal alert on EICAR — 60/66 engines](img/Virustotal-integration-done.png)
+![VirusTotal alert on EICAR, 60/66 engines](img/virustotal-integration-done.png)
 
 ```bash
 sudo grep -iE "virustotal|87105" /var/ossec/logs/alerts/alerts.json | tail -3
@@ -308,7 +310,7 @@ sudo grep -iE "virustotal|87105" /var/ossec/logs/alerts/alerts.json | tail -3
 
 In the UI: Threat Hunting → `rule.id: 87105`.
 
-![](img/87105.png)
+![](img/wazuh-virustotal-rule-87105-alert.png)
 
 ---
 
@@ -316,14 +318,14 @@ In the UI: Threat Hunting → `rule.id: 87105`.
 
 Active out of the box, no configuration required:
 
-- **SCA** — evaluates the host against the CIS benchmark matching the detected OS. Results under **Configuration Assessment**.
-- **MITRE ATT&CK** — alerts are automatically tagged with the corresponding tactic/technique.
-- **Regulatory Compliance** — alerts carry PCI DSS, GDPR, HIPAA and NIST 800-53 tags.
+- SCA: evaluates the host against the CIS benchmark matching the detected OS. Results under **Configuration Assessment**.
+- MITRE ATT&CK: alerts are automatically tagged with the corresponding tactic/technique.
+- Regulatory Compliance: alerts carry PCI DSS, GDPR, HIPAA and NIST 800-53 tags.
 
 ---
 
 ## References
 
-- Installation walkthrough: [03-wazuh.md](03-wazuh.md)
-- Architecture decisions: ADR-003, ADR-006 in [DECISIONS.md](../DECISIONS.md)
-- Issues encountered while building this procedure: [troubleshooting/wazuh-soc-troubleshooting.md](troubleshooting/wazuh-soc-troubleshooting.md)
+- Installation walkthrough: [03-wazuh.md](../phase-2-install/wazuh.md)
+- Architecture decisions: ADR-003, ADR-006 in [DECISIONS.md](../../DECISIONS.md)
+- Issues encountered while building this procedure: [troubleshooting/wazuh-soc-troubleshooting.md](../troubleshooting/wazuh-soc-troubleshooting.md)

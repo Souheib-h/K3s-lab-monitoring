@@ -1,4 +1,4 @@
-# Phase 2 — Grafana Server Installation
+# Phase 2: Grafana Server Installation
 
 **VM:** Grafana-srv (10.20.0.13) **OS:** Ubuntu 26.04 "Resolute" **Grafana version:** 13.1.0 (OSS, official apt repo)
 
@@ -21,7 +21,7 @@ echo "deb [signed-by=/etc/apt/keyrings/grafana.asc] https://apt.grafana.com beta
 sudo apt-get update
 ```
 
-> Chose the apt repo over a standalone `.deb` so future version upgrades go through normal `apt upgrade` rather than manual re-downloads — consistent with the Zabbix install approach.
+> Chose the apt repo over a standalone `.deb` so future version upgrades go through normal `apt upgrade` rather than manual re-downloads, consistent with the Zabbix install approach.
 
 ## 3. Install Grafana OSS
 
@@ -29,7 +29,7 @@ sudo apt-get update
 sudo apt-get install grafana
 ```
 
-> Note: a `grafana-enterprise` `.deb` was initially downloaded directly from Grafana's release page. Without an activated license key, Enterprise behaves identically to OSS — paid features simply stay locked. Switched to the OSS apt package instead for a cleaner licensing story and proper update management.
+> Note: a `grafana-enterprise` `.deb` was initially downloaded directly from Grafana's release page. Without an activated license key, Enterprise behaves identically to OSS, paid features simply stay locked. Switched to the OSS apt package instead for a cleaner licensing story and proper update management.
 
 ## 4. Enable and start the service
 
@@ -42,13 +42,13 @@ sudo systemctl start grafana-server
 sudo systemctl status grafana-server
 ```
 
-![Grafana service active and enabled](img/grafana-installed-actived.png)
+![Grafana service active and enabled](img/grafana-installed-active.png)
 
 ## 5. First login
 
 Web UI reachable at `http://10.20.0.13:3000`.
 
-Default credentials: `admin` / `admin` — Grafana forces a password change on first login automatically (unlike Zabbix, no manual step needed here).
+Default credentials: `admin` / `admin`, Grafana forces a password change on first login automatically (unlike Zabbix, no manual step needed here).
 
 ![Grafana login page](img/grafana-login-page.png)
 

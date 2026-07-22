@@ -1,9 +1,9 @@
-# 01 — Network & VMs (Phase 1)
+# 01: Network & VMs (Phase 1)
 
 ## Architecture
 
 ```
-k3s-net (10.10.0.0/24) — NAT
+k3s-net (10.10.0.0/24), NAT
 ├── Load-srvs        10.10.0.10
 ├── K3s-srv-1        10.10.0.11
 ├── K3s-srv-2        10.10.0.12
@@ -14,7 +14,7 @@ k3s-net (10.10.0.0/24) — NAT
 ├── K3s-agent-node-3 10.10.0.33
 └── OPNsense (WAN)   10.10.0.254
 
-monitoring-net (10.20.0.0/24) — NAT
+monitoring-net (10.20.0.0/24), NAT
 ├── Zabbix-srv       10.20.0.10
 ├── Wazuh-srv        10.20.0.11
 ├── Prometheus-srv   10.20.0.12
@@ -23,6 +23,8 @@ monitoring-net (10.20.0.0/24) — NAT
 ```
 
 ---
+
+![Lab network overview](img/network-views.png)
 
 ## Creating the monitoring-net network
 
@@ -37,7 +39,7 @@ Gateway : 10.20.0.1
 DHCP    : 10.20.0.100 - 10.20.0.254
 ```
 
-![monitoring-net created](img/monitoring-net-Creation.png)
+![monitoring-net created](img/monitoring-net-creation.png)
 
 ---
 
@@ -116,9 +118,9 @@ alias monitoring-stop="for vm in Zabbix-srv Wazuh-srv Prometheus-srv Grafana-srv
 
 ### Problem
 
-The two networks (`k3s-net` and `monitoring-net`) are isolated by libvirt. Traffic between them is masqueraded — the source IP is replaced by the libvirt gateway, making inter-network routing impossible.
+The two networks (`k3s-net` and `monitoring-net`) are isolated by libvirt. Traffic between them is masqueraded, the source IP is replaced by the libvirt gateway, making inter-network routing impossible.
 
-![Cluster and monitoring without gateway](img/cluster&monitoring-lab-without-gateway.png)
+![Cluster and monitoring without gateway](img/cluster-monitoring-lab-without-gateway.png)
 
 ### Solution
 
@@ -136,17 +138,17 @@ CPU      : 2
 Disk     : 8 GB
 ```
 
-![OPNsense web interface](img/opnsens-web-interface.png)
+![OPNsense web interface](img/opnsense-web-interface.png)
 
 ### OPNsense configuration
 
 **Interfaces → [WAN]**: disable "Block private networks"
 
-![Block private networks disabled](img/Block-private-networks.png)
+![Block private networks disabled](img/block-private-networks.png)
 
 **Firewall → NAT → Outbound**: set to "Disable"
 
-![Outbound NAT disabled](img/Outbound-disable.png)
+![Outbound NAT disabled](img/outbound-nat-disable.png)
 
 ### Libvirt masquerade fix
 
@@ -172,6 +174,10 @@ firewall_backend = "iptables"
 ```
 
 ---
+
+Routes were first added manually and validated before being made persistent:
+
+![Manual routing test](img/manual-routing-test.png)
 
 ## Persistent routes via Netplan
 
@@ -215,7 +221,7 @@ network:
           via: 10.20.0.254
 ```
 
-![Monitoring routes added and verified](img/ajout-verification-des-route-monitorinf.png)
+![Monitoring routes added and verified](img/route-verification-monitoring.png)
 
 ---
 
@@ -229,7 +235,7 @@ ssh k3s-admin@10.10.0.11 "ping -c 2 10.20.0.10"
 ssh zabbix-admin@10.20.0.10 "ping -c 2 10.10.0.11"
 ```
 
-![Cluster ↔ monitoring communication](img/cluser-monitoring-pinging.png)
+![Cluster ↔ monitoring communication](img/cluster-monitoring-pinging.png)
 
 ```
 ✅ k3s-net    → monitoring-net  0% packet loss

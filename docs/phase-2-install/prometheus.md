@@ -1,4 +1,4 @@
-# Phase 2 — Prometheus Server Installation
+# Phase 2: Prometheus Server Installation
 
 **VM:** Prometheus-srv (10.20.0.12)
 **OS:** Ubuntu 26.04 "Resolute"
@@ -7,13 +7,13 @@
 
 ## 1. Dedicated service user
 
-Prometheus runs under a dedicated system account rather than root or the admin user — least-privilege principle: a future CVE in the binary stays contained to this account's permissions instead of granting broader access.
+Prometheus runs under a dedicated system account rather than root or the admin user, least-privilege principle: a future CVE in the binary stays contained to this account's permissions instead of granting broader access.
 
 ```bash
 sudo useradd --no-create-home --shell /bin/false prometheus
 ```
 
-`--no-create-home --shell /bin/false` means this account exists only to own files and run the process — no home directory, no interactive login possible.
+`--no-create-home --shell /bin/false` means this account exists only to own files and run the process, no home directory, no interactive login possible.
 
 ## 2. Directories
 
@@ -23,7 +23,7 @@ sudo mkdir -p /etc/prometheus /var/lib/prometheus
 
 ## 3. Download and install the binary
 
-No official apt repository is maintained by the Prometheus project — static binaries from GitHub releases are the standard distribution method.
+No official apt repository is maintained by the Prometheus project, static binaries from GitHub releases are the standard distribution method.
 
 ```bash
 curl -s https://api.github.com/repos/prometheus/prometheus/releases/latest | grep tag_name
@@ -41,11 +41,11 @@ sudo chown -R prometheus:prometheus /etc/prometheus /var/lib/prometheus
 sudo chown prometheus:prometheus /usr/local/bin/prometheus /usr/local/bin/promtool
 ```
 
-> Note: Prometheus v3.x dropped the legacy `consoles/` and `console_libraries/` directories present in v2.x tutorials — the old console-template system was replaced by the modern built-in React UI. Any guide referencing `--web.console.templates` / `--web.console.libraries` is outdated for v3.x; these flags and directories no longer exist in the release tarball.
+> Note: Prometheus v3.x dropped the legacy `consoles/` and `console_libraries/` directories present in v2.x tutorials, the old console-template system was replaced by the modern built-in React UI. Any guide referencing `--web.console.templates` / `--web.console.libraries` is outdated for v3.x; these flags and directories no longer exist in the release tarball.
 
 ## 4. systemd service
 
-Retention extended to 30 days (default is 15) — more historical data useful for a lab environment.
+Retention extended to 30 days (default is 15), more historical data useful for a lab environment.
 
 ```bash
 sudo tee /etc/systemd/system/prometheus.service > /dev/null <<'EOF'
@@ -81,7 +81,7 @@ Web UI reachable at `http://10.20.0.12:9090`.
 
 ![Prometheus web interface](img/prometheus-interface.png)
 
-Checked under **Status → Target health**: the default self-scrape job (`job="prometheus"`, `instance="localhost:9090"`) reports `1/1 up`, ~2ms scrape latency, confirming Prometheus is both running and actively collecting its own metrics — not just alive as a process.
+Checked under **Status → Target health**: the default self-scrape job (`job="prometheus"`, `instance="localhost:9090"`) reports `1/1 up`, ~2ms scrape latency, confirming Prometheus is both running and actively collecting its own metrics, not just alive as a process.
 
 ## Result
 

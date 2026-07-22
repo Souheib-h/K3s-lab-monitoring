@@ -1,4 +1,4 @@
-# Troubleshooting — Ansible rollout & Prometheus↔K3s integration
+# Troubleshooting: Ansible rollout & Prometheus↔K3s integration
 
 Every issue hit while building Phase 5 (Ansible automation) and the
 Prometheus→K3s scraping pipeline, in the order encountered. Kept together
@@ -7,10 +7,10 @@ that turned out to matter. Format: symptom → diagnosis → root cause → fix.
 
 ---
 
-## 1. Ansible hangs silently on specific hosts — asymmetric routing
+## 1. Ansible hangs silently on specific hosts: asymmetric routing
 
 **Symptom.** `ansible -m ping` succeeded on 11/13 hosts. On `k3s-db` and
-`load-srv`, Ansible hung indefinitely — no error, no timeout. Yet manually:
+`load-srv`, Ansible hung indefinitely, no error, no timeout. Yet manually:
 
 ```
 nc -zvw3 10.10.0.20 22        # TCP OK
@@ -21,14 +21,14 @@ ssh user@10.10.0.20 'echo OK' # auth + exec OK
 **Diagnosis.** A comparative gather script (OS, sshd, python, disk, perms, rc
 files, routes) run against one working host and both failing hosts turned up
 exactly one difference: the route back to `10.20.0.0/24` was present on the
-working host and absent on both failing ones — missed by the Phase 1 netplan
+working host and absent on both failing ones, missed by the Phase 1 netplan
 rollout, which had only covered the 6 K3s nodes.
 
 **Root cause.** Forward path: ansible-srv (10.20.0.x) → OPNsense → target.
 Works. Return path: with no route to 10.20.0.0/24, the target's reply exits
 via its default gateway (the libvirt host, 10.10.0.1) instead of OPNsense.
 The libvirt host knows both bridges, so tiny exchanges (ICMP, SSH handshake,
-short commands) survive the asymmetric path — but Ansible pushes its module
+short commands) survive the asymmetric path, but Ansible pushes its module
 payload over SFTP (~100 KB), and the sustained flow dies on the asymmetric
 path while the session still reports "established". Hence: ping and SSH
 succeed, Ansible hangs.
@@ -60,7 +60,7 @@ a working and a failing host finds this kind of diff in one pass.
 
 ---
 
-## 2. Fix applied, Ansible still hangs — stale ControlMaster socket
+## 2. Fix applied, Ansible still hangs: stale ControlMaster socket
 
 **Symptom.** After adding the missing route, `ansible k3s-db -m ping` still
 hung.
@@ -74,7 +74,7 @@ connection alive; the new return path is only used by *new* connections.
 rm -f ~/.ansible/cp/*
 ```
 
-**Takeaway.** A network fix does not revive existing connections — always
+**Takeaway.** A network fix does not revive existing connections; always
 purge the control socket cache after a routing change before retesting.
 
 ---
@@ -93,7 +93,7 @@ even after supplying `-K` with the correct password.
 **Diagnosis.** A manual `ssh -t ... 'sudo -v'` on the failing host showed the
 prompt text itself: `[sudo: authenticate] Password:` instead of the standard
 `[sudo] password for <user>:`. Ansible's become plugin pattern-matches the
-prompt text to know when to inject the password — a non-standard prompt (seen
+prompt text to know when to inject the password, a non-standard prompt (seen
 on hosts created later / with a newer sudo build) is never recognized, so
 Ansible waits forever regardless of whether the password is correct.
 
@@ -108,7 +108,7 @@ ssh -t -i ~/.ssh/ansible <user>@<ip> \
 Once NOPASSWD is in place there is no prompt left to mismatch.
 
 **Takeaway.** "Timeout waiting for privilege escalation prompt" is not
-necessarily a wrong password — check the literal prompt text first.
+necessarily a wrong password; check the literal prompt text first.
 
 ---
 
@@ -116,7 +116,7 @@ necessarily a wrong password — check the literal prompt text first.
 
 **Symptom.** `[WARNING]: Skipping unexpected key (load-srv) in group
 (load_balancer)` and the host missing from `ansible-inventory --graph` and
-from every playbook run — twice, independently, for the same host.
+from every playbook run, twice, independently, for the same host.
 
 **Root cause.** Both times, the host entry was indented at the same level as
 `hosts:` instead of one level deeper underneath it:
@@ -127,7 +127,7 @@ from every playbook run — twice, independently, for the same host.
       load-srv: { ansible_host: 10.10.0.10 }
 ```
 YAML parses `hosts:` as an empty mapping and `load-srv` as an unrelated
-sibling key of the group — which Ansible then rejects as "unexpected".
+sibling key of the group, which Ansible then rejects as "unexpected".
 
 **Fix.**
 ```yaml
@@ -136,15 +136,15 @@ sibling key of the group — which Ansible then rejects as "unexpected".
         load-srv: { ansible_host: 10.10.0.10 }
 ```
 
-**Related trap — duplicate `hosts:` key.** Pasting a new group's block
+**Related trap, duplicate `hosts:` key.** Pasting a new group's block
 *inside* an existing group's YAML body (rather than as a sibling) produces
 two `hosts:` keys in the same mapping; YAML silently keeps only the last one
-and drops everything under the first — an entire group (four monitoring VMs)
+and drops everything under the first, an entire group (four monitoring VMs)
 disappeared from the graph with only a generic
 `found a duplicate dict key (hosts)` warning as a clue.
 
 **Takeaway.** After any inventory edit, always run
-`ansible-inventory --graph` before the actual playbook — it is the cheapest
+`ansible-inventory --graph` before the actual playbook; it is the cheapest
 way to catch a host or group that silently vanished.
 
 ---
@@ -159,8 +159,7 @@ Only `all.yml` matches the built-in `all` group automatically; a file named
 anything else at that level (e.g. `secrets.yml`) matches no group and is
 silently ignored.
 
-**Fix.** Group multiple files under a directory named after the group instead
-— every file inside is loaded for that group:
+**Fix.** Group multiple files under a directory named after the group instead; every file inside is loaded for that group:
 ```
 inventory/group_vars/all/main.yml       # non-secret vars
 inventory/group_vars/all/secrets.yml    # gitignored
@@ -171,7 +170,7 @@ pattern as soon as you want to split committed vars from secrets.
 
 ---
 
-## 6. `community.zabbix` v3 — two breaking changes from v1/v2 tutorials
+## 6. `community.zabbix` v3: two breaking changes from v1/v2 tutorials
 
 **Symptom A.** `AssertionError: socket_path must be a value`, using the
 "classic" pattern (`connection: local` + credentials passed via
@@ -209,22 +208,21 @@ missing host groups.
 ```
 
 **Takeaway.** Community collection major versions can change the connection
-model, not just module parameters — check the target version's docs rather
+model, not just module parameters; check the target version's docs rather
 than reusing an older example verbatim.
 
 ---
 
-## 7. Alpine's Wazuh package ships no init script — twice
+## 7. Alpine's Wazuh package ships no init script: twice
 
 **Symptom.** `Error when trying to add zabbix-agent: rc=1 * rc-update:
-service 'zabbix-agent' does not exist` — then, after fixing that, the
+service 'zabbix-agent' does not exist`, then, after fixing that, the
 identical error for `wazuh-agent`.
 
 **Root cause.** OpenRC service names on Alpine are suffixed `-d`
-(`zabbix-agentd`), unlike the systemd unit name used by the Debian package —
-first gotcha. Second, deeper gotcha: the Wazuh **apk** package installs
+(`zabbix-agentd`), unlike the systemd unit name used by the Debian package; first gotcha. Second, deeper gotcha: the Wazuh **apk** package installs
 `/var/ossec/bin/wazuh-control` but ships **no OpenRC init script at all**
-(`ls /etc/init.d/ | grep wazuh` returns nothing) — Ubuntu's `.deb` provides
+(`ls /etc/init.d/ | grep wazuh` returns nothing), while Ubuntu's `.deb` provides
 one, Alpine's `.apk` does not.
 
 **Fix.** A custom OpenRC script wrapping `wazuh-control`, deployed by the
@@ -233,7 +231,7 @@ playbook itself (`files/wazuh-agentd.initd` → `ansible.builtin.copy` →
 wazuh-agentd, state: started, enabled: true}`.
 
 **Takeaway.** Never assume a community/vendor package on a minority distro
-ships the same integration files as the mainstream one — verify
+ships the same integration files as the mainstream one, verify
 `/etc/init.d/` (or the systemd equivalent) exists before writing a `service:`
 task.
 
@@ -243,7 +241,7 @@ task.
 
 **Symptom.** Every single run of `install-agents.yml` reported
 `changed: [ansible-srv]` / `changed: [load-srv]` on the "Enable and start
-wazuh-agent" task — even when the agent was already running and nothing had
+wazuh-agent" task, even when the agent was already running and nothing had
 changed.
 
 **Root cause.** The initial `status()` function in the custom init script
@@ -264,21 +262,21 @@ status() {
 ```
 
 **Takeaway.** A custom init script's `status()` is what idempotence is built
-on — if it doesn't return a real exit code, every playbook run "changes"
+on, if it doesn't return a real exit code, every playbook run "changes"
 something that never actually changed.
 
 ---
 
-## 9. Host freeze — RAM overcommit across 13 simultaneous VMs
+## 9. Host freeze: RAM overcommit across 13 simultaneous VMs
 
 **Symptom.** The Arch host completely froze mid-rollout; no SysRq response
 (magic SysRq keys disabled by default on Arch).
 
 **Diagnosis.** `free -h` before the freeze (checked after recovery) showed
 the trajectory: `available` dropping from several GiB to near 0 with swap
-climbing — classic swap-thrashing on a Btrfs swapfile (slow under sustained
+climbing, classic swap-thrashing on a Btrfs swapfile (slow under sustained
 pressure). An audit of every VM's `Max memory` totalled **46 GiB allocated
-for 31 GiB physical** — an ~50% overcommit that had been tolerable only as
+for 31 GiB physical**, an ~50% overcommit that had been tolerable only as
 long as guests were started in small groups; a full-inventory Ansible run
 woke every guest's memory pressure at once.
 
@@ -291,7 +289,7 @@ rebooted the lab in stages (router → k3s infra → control-plane → workers �
 monitoring → control node) rather than all at once.
 
 **Takeaway.** KVM overcommit tolerates guests that don't touch their full
-allocation *most of the time* — it does not tolerate a coordinated wake-up
+allocation *most of the time*; it does not tolerate a coordinated wake-up
 (a full-fleet Ansible run) hitting a 50% overcommit simultaneously. Audit
 `virsh dominfo` totals against physical RAM before scaling the number of
 concurrently-running VMs, not after a freeze.
@@ -309,7 +307,7 @@ while trying to `kubectl patch` the upstream Service to `type: NodePort`.
 
 **Root cause.** The official manifest creates a **headless** Service
 (`clusterIP: None`), designed for in-cluster discovery. A headless Service's
-`ClusterIP` field cannot be converted by a patch — it's a structural
+`ClusterIP` field cannot be converted by a patch, it's a structural
 constraint, not a permissions issue.
 
 **Fix.** Leave the original headless Service untouched; add a second Service
@@ -344,7 +342,7 @@ rules:
     verbs: ["get", "list", "watch"]
 ```
 The earlier imperative attempt had also left a ClusterRoleBinding pointing at
-a ClusterRole that didn't actually exist with the intended rules — worth
+a ClusterRole that didn't actually exist with the intended rules; worth
 double-checking with `kubectl auth can-i ... --as=system:serviceaccount:...`
 after any RBAC change.
 
@@ -362,17 +360,17 @@ applicable for unit prometheus.service.`
 `systemctl reload` has nothing to call even though the config itself was
 valid (`promtool check config` passed).
 
-**Fix.** `sudo systemctl restart prometheus` instead — a few seconds of
+**Fix.** `sudo systemctl restart prometheus` instead; a few seconds of
 scrape gap, no data loss to the TSDB.
 
 **Takeaway.** `promtool check config` validates syntax, not whether the
-running process can pick up the change without a full restart — check the
+running process can pick up the change without a full restart, check the
 unit file's reload support before assuming `reload` will work.
 
 ---
 
 ## 13. A duplicated scrape target doubles every metric
 
-See the dedicated writeup in `docs/10-prometheus-k3s-scraping.md` §5 — kept
+See the dedicated writeup in `docs/10-prometheus-k3s-scraping.md` §5, kept
 there rather than duplicated here since it's part of the main scraping
 narrative rather than a one-off fix.

@@ -1,4 +1,4 @@
-# Troubleshooting: Zabbix API — "Not authorized" despite valid credentials
+# Troubleshooting: Zabbix API: "Not authorized" despite valid credentials
 
 **Affected component:** Grafana → Zabbix datasource (`alexanderzobnin-zabbix-app` plugin)
 **Environment:** Grafana 13.1.0, Zabbix 7.4.11, Ubuntu 26.04, PHP 8.5, Apache 2.4.66 + PHP-FPM
@@ -12,7 +12,7 @@
 - `Save & test` in Grafana Zabbix datasource returned `"Could not connect to given url"` or hung for 60 seconds then failed with `"context deadline exceeded"`
 - Direct `curl` to `http://10.20.0.10/zabbix/api_jsonrpc.php` worked perfectly (13ms, valid JSON-RPC response)
 - `user.login` via curl returned a valid session token
-- All network checks passed — 0% packet loss, correct routing through OPNsense
+- All network checks passed, 0% packet loss, correct routing through OPNsense
 
 ## What was eliminated
 
@@ -34,19 +34,19 @@
 **tcpdump** on `grafana-srv` during a `Save & test` revealed the actual HTTP exchange:
 
 ```
-# Step 1 — user.login succeeds
+# Step 1: user.login succeeds
 POST /zabbix/api_jsonrpc.php
 {"method":"user.login","params":{"password":"zabbix","username":"Admin"}}
 → {"result":"a8ec8c7eaf423b688034588f4ed9b9e7"}  ✅
 
-# Step 2 — hostgroup.get with Bearer token fails
+# Step 2: hostgroup.get with Bearer token fails
 POST /zabbix/api_jsonrpc.php
 Authorization: Bearer a8ec8c7eaf423b688034588f4ed9b9e7
 {"method":"hostgroup.get",...}
 → {"error":{"data":"Not authorized."}}  ❌
 ```
 
-`user.login` worked, returned a valid token — but subsequent calls with `Authorization: Bearer <token>` were rejected.
+`user.login` worked, returned a valid token, but subsequent calls with `Authorization: Bearer <token>` were rejected.
 
 **Key insight:** the same `Authorization: Bearer` call via curl worked fine when tested manually. The difference: curl hit Apache directly, but Grafana's plugin calls were proxied through PHP-FPM via a Unix socket.
 
@@ -61,7 +61,7 @@ Without this, Apache strips the `Authorization` header before passing the reques
 Confirmed by:
 ```bash
 ls /etc/apache2/conf-enabled/ | grep fpm
-# empty — php8.5-fpm.conf was not enabled
+# empty: php8.5-fpm.conf was not enabled
 ```
 
 ## Fix
@@ -87,7 +87,7 @@ sudo systemctl reload apache2
 
 ## Why this happened
 
-Zabbix 7.4 on Ubuntu 26.04 installs with `zabbix-apache-conf` which configures Apache to proxy PHP requests to PHP-FPM via a Unix socket (`proxy:unix:/var/run/php/zabbix.sock|fcgi://localhost`). The `php8.5-fpm.conf` that fixes the Authorization header passthrough is a **separate Apache conf** that ships with the `php8.5-fpm` package — it needs to be explicitly enabled with `a2enconf`. The Zabbix installer doesn't do this automatically.
+Zabbix 7.4 on Ubuntu 26.04 installs with `zabbix-apache-conf` which configures Apache to proxy PHP requests to PHP-FPM via a Unix socket (`proxy:unix:/var/run/php/zabbix.sock|fcgi://localhost`). The `php8.5-fpm.conf` that fixes the Authorization header passthrough is a **separate Apache conf** that ships with the `php8.5-fpm` package, it needs to be explicitly enabled with `a2enconf`. The Zabbix installer doesn't do this automatically.
 
 This is easy to miss because:
 1. The Zabbix web interface works fine without it (it doesn't use Bearer auth internally)
@@ -96,5 +96,5 @@ This is easy to miss because:
 
 ## References
 
-- [grafana/grafana-zabbix #1957](https://github.com/grafana/grafana-zabbix/issues/1957) — similar symptoms reported after Grafana upgrades
-- [Grafana Community Forum thread](https://community.grafana.com/t/grafana-and-zabbix-plugin-issue) — `SetEnvIf Authorization` fix mentioned by user `jamesw6`
+- [grafana/grafana-zabbix #1957](https://github.com/grafana/grafana-zabbix/issues/1957), similar symptoms reported after Grafana upgrades
+- [Grafana Community Forum thread](https://community.grafana.com/t/grafana-and-zabbix-plugin-issue), `SetEnvIf Authorization` fix mentioned by user `jamesw6`

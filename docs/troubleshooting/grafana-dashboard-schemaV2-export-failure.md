@@ -1,4 +1,4 @@
-# Post-mortem — Grafana Dashboard Export Failure (Schema v2)
+# Post-mortem: Grafana Dashboard Export Failure (Schema v2)
 
 ## Symptom
 
@@ -14,7 +14,7 @@ clean Grafana Docker instance (localhost) failed with:
 Grafana 13.1's dashboard editor now saves dashboards internally using 
 **schema v2** (`elements` + `layout` structure, replacing the classic 
 `panels[]` array). This schema requires the `dashboardNewLayouts` 
-feature toggle ("Dynamic Dashboards") — **not enabled by default** on 
+feature toggle ("Dynamic Dashboards"), **not enabled by default** on 
 any standard Grafana instance, including a vanilla `grafana/grafana:latest` 
 Docker image.
 
@@ -33,30 +33,30 @@ to build a public deliverable on top of.
    upload validator) expect but that a stripped-down export omits: 
    `id: null`, `gnetId: null`, `tags: []`, `links: []`, `__elements: {}`.
 3. `__requires` needs a complete list (grafana core + datasource + 
-   every panel type used — `stat`, `timeseries`, etc.), not just the 
+   every panel type used, `stat`, `timeseries`, etc.), not just the 
    datasource entry.
 4. Templated datasource UID references (`"uid": "${DS_PROMETHEUS}"`) 
    and added the corresponding `templating.list` entry with 
    `"type": "datasource"`.
 
-## Second symptom — Grafana.com rejects with "Old dashboard JSON format"
+## Second symptom: Grafana.com rejects with "Old dashboard JSON format"
 
 Even after templating correctly, Grafana.com's upload validator rejected 
 the file with this specific message. Root cause: **missing `id: null` 
 field**. The validator appears to use the presence/absence of this key 
-as one of its format-version heuristics — omitting it (rather than 
+as one of its format-version heuristics, omitting it (rather than 
 setting it to `null`) triggers the "old format" rejection path, 
 somewhat counterintuitively since `null` is normally treated as 
 "absent" in most JSON tooling.
 
 Applying the fix (re-adding `id: null` explicitly, along with the other 
-missing fields listed above) resolved the rejection — the dashboard was 
+missing fields listed above) resolved the rejection, the dashboard was 
 accepted and assigned public ID `25537`.
 
 ## Lesson
 
 Don't trust "Export as code" from the Grafana 13.x UI at face value for 
-external portability — it reflects whatever internal schema the 
+external portability, it reflects whatever internal schema the 
 instance currently uses (v1 or v2), and the "share with another 
 instance" toggle templates datasources correctly but does **not** 
 downgrade the schema version itself. For any external-facing export 

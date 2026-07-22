@@ -1,0 +1,107 @@
+# Phase 3: NOC Configuration (Grafana Datasources)
+
+## Prometheus datasource: ✅ Connected
+
+**Connections → Add new data source → Prometheus**
+
+![Adding a new data source](img/grafana-add-new-source.png)
+
+```
+URL: http://10.20.0.12:9090
+Auth: None
+```
+
+![Prometheus URL configuration](img/grafana-prometheus-url-add.png)
+
+![Connection settings](img/grafana-connection.png)
+
+Save & test confirmed working immediately.
+
+![Prometheus datasource successfully added](img/grafana-successfully-added-prometheus.png)
+
+Verified via **Drilldown → Metrics**: 319 metrics available from Prometheus's self-scrape, rendering live graphs, confirms the datasource is actively returning queryable time series data, not just reachable.
+
+![Prometheus metrics pulled into Grafana](img/grafana-prometheus-metrics-pulled.png)
+
+---
+
+## Zabbix datasource: ✅ Connected
+
+**Plugin:** `alexanderzobnin-zabbix-app` v6.4.0
+
+### 1. Install the plugin
+
+```bash
+sudo grafana-cli --homepath "/usr/share/grafana" plugins install alexanderzobnin-zabbix-app
+sudo chown -R grafana:grafana /var/lib/grafana/plugins/alexanderzobnin-zabbix-app
+sudo systemctl restart grafana-server
+```
+
+> Note: the standard `grafana-cli` command (without `--homepath`) fails on this build, use the explicit homepath.
+> After install, ownership must be set to `grafana:grafana` manually, the CLI installs as `root:root` which silently prevents the plugin from loading.
+
+### 2. Enable the plugin
+
+**Administration → Plugins and data → Plugins → Zabbix → Enable**
+
+![Zabbix plugin installed](img/grafana-zabbix-plugin-installed.png)
+
+![Zabbix plugin enabled](img/grafana-zabbix-enabling.png)
+
+> The plugin won't appear in the datasource list until explicitly enabled here, it registers and runs as a background process but stays inactive until toggled on.
+
+### 3. Pre-requisite: fix Apache Authorization header passthrough on Zabbix-srv
+
+> ⚠️ Without this fix, every authenticated Zabbix API call will return `"Not authorized"` even with correct credentials. This step is required before configuring the datasource.
+
+```bash
+ssh zabbix-admin@10.20.0.10
+sudo a2enconf php8.5-fpm
+sudo systemctl reload apache2
+```
+
+This enables the Apache conf that passes the `Authorization` header through to PHP-FPM. Without it, Apache strips the header silently.
+
+See full post-mortem: [`docs/troubleshooting/zabbix-apache-authorization-header.md`](../troubleshooting/zabbix-apache-authorization-header.md)
+
+### 4. Configure the datasource
+
+**Connections → Add new data source → Zabbix**
+
+![Add Zabbix datasource](img/grafana-zabbix-datasource-add.png)
+
+
+```
+URL:              http://10.20.0.10/zabbix/api_jsonrpc.php
+Auth type:        User and password
+Username:         Admin
+Password:         <zabbix_admin_password>
+Authentication:   No Authentication (HTTP section)
+```
+
+![Zabbix datasource connected](img/grafana-zabbix-integration-done.png)
+
+Save & test → **"Zabbix API version 7.4.11"** ✅
+
+---
+
+
+### 5. Direct DB connection (trends)
+
+The Zabbix plugin can read trend data straight from the Zabbix MySQL database, offloading long-range queries from the API. A dedicated read-only MySQL user is created and bound to the datasource:
+
+![MySQL user creation and grant](img/grafana-mysql-user-creation.png)
+
+![Adding the MySQL datasource](img/grafana-zabbix-mysql-datasource-adding.png)
+
+![MySQL datasource connected](img/grafana-zabbix-mysql-datasource-done.png)
+
+---
+
+## Result
+
+![NOC overview](img/noc-overview.png)
+
+![Node drill-down view](img/node-view.png)
+
+![Capacity & trends view](img/capacity-trends-view.png)
