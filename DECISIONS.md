@@ -64,6 +64,22 @@ OPNsense 26.1 deployed as a dedicated VM with:
 
 libvirt's nftables/iptables masquerade chain (`LIBVIRT_PRT`) rewrites source IPs before custom routing can work. Fix: switch libvirt firewall backend to `iptables`, add `RETURN` rules to exempt inter-network traffic, disable outbound NAT on OPNsense.
 
+
+### Update  outbound NAT: Disable is too broad, Hybrid is correct
+
+**Status:** Revised (2026-07-23)
+
+Disabling OPNsense's outbound NAT entirely (to stop it rewriting source addresses for the inter-network routing above) had an unintended side effect: it also stopped NAT for traffic actually leaving the lab. Any VM on `k3s-net`, `monitoring-net`, or `bastion-net` lost internet access  discovered when a fresh `Loki-srv` VM could reach every other lab network but timed out on `apk update`.
+
+**Fix:** switch outbound NAT mode from **Disable** to **Hybrid** (Firewall > NAT > Outbound). Hybrid preserves the manual/system rules needed for inter-network routing while still auto-generating NAT for everything else, including WAN egress.
+
+Verified both directions still work after the change:
+
+- `ping 8.8.8.8` from a lab VM internet reachable
+- `ping 10.10.0.254` from monitoring-net , inter-network routing via OPNsense still intact
+
+**Lesson:** a fix scoped to "stop rewriting addresses between our own networks" should be scoped that narrowly disabling a whole subsystem (outbound NAT) to solve a specific symptom (source rewriting) reaches further than intended. Hybrid mode existed for exactly this reason and should have been the first choice.
+
 ---
 
 ## ADR-003: Wazuh all-in-one for SOC
