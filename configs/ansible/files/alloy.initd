@@ -1,0 +1,16 @@
+#!/sbin/openrc-run
+
+name="alloy"
+description="Grafana Alloy telemetry collector"
+command="/usr/local/bin/alloy"
+command_args="run /etc/alloy/config.alloy --storage.path=/var/lib/alloy"
+command_user="root:root"
+command_background="yes"
+pidfile="/run/${RC_SVCNAME}.pid"
+output_log="/var/log/alloy/alloy.log"
+error_log="/var/log/alloy/alloy-error.log"
+
+depend() {
+    need net
+    after firewall
+}

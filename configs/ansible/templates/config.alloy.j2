@@ -1,0 +1,19 @@
+// Managed by Ansible — do not edit by hand
+local.file_match "system_logs" {
+	path_targets = [{
+		__path__ = "{{ syslog_path }}",
+		job      = "syslog",
+		host     = "{{ inventory_hostname }}",
+	}]
+}
+
+loki.source.file "system_logs" {
+	targets    = local.file_match.system_logs.targets
+	forward_to = [loki.write.loki_srv.receiver]
+}
+
+loki.write "loki_srv" {
+	endpoint {
+		url = "{{ loki_push_url }}"
+	}
+}

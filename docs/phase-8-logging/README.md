@@ -237,4 +237,30 @@ sudo rc-service networking restart
 
 - Alloy deployment to the other 12 lab hosts via Ansible (this VM was the pilot).
 - A basic Grafana logs dashboard.
-- Syslog hostname still shows the pre-rename `Alpine-base` in log lines — cosmetic, same class of fix as the bastion's syslog restart.
+- Syslog hostname still shows the pre-rename `Alpine-base` in log lines — cosmetic, same class of fix as the bastion's syslog restart.## 8. Rollout to the rest of the lab (Ansible)
+
+The pilot above proved the setup manually on `Loki-srv`. Rolling it out to the other 12 hosts uses the same pattern as `install-agents.yml` (Phase 5): one playbook, OS-conditional blocks for Alpine vs Ubuntu.
+
+Files: [`configs/ansible/playbooks/install-alloy.yml`](../../configs/ansible/playbooks/install-alloy.yml), [`configs/ansible/templates/config.alloy.j2`](../../configs/ansible/templates/config.alloy.j2), [`configs/ansible/files/alloy.initd`](../../configs/ansible/files/alloy.initd) (Alpine/OpenRC), [`configs/ansible/files/alloy.service`](../../configs/ansible/files/alloy.service) (Ubuntu/systemd).
+
+The zip is downloaded **once** on the control node and pushed to every host over the local network — downloading it 13 times from GitHub at lab bandwidth would take hours.
+
+```bash
+cd ~/ansible
+ansible-playbook -i inventory/hosts.yml playbooks/install-alloy.yml
+```
+
+Each host gets its own `job="syslog"`, `host="{{ inventory_hostname }}"` labels, tailing `/var/log/messages` (Alpine) or `/var/log/syslog` (Ubuntu).
+
+Result: **12/13 hosts** shipping logs (`ansible-srv` excluded — its `/tmp` ran out of space during its own gathering-facts step; not worth fixing for a control node that doesn't need its own logs collected this way).
+
+![Alloy deployed and shipping logs from a K3s node](img/alloy-on-k3s.png)
+
+![Alloy deployed and shipping logs from the monitoring stack (Zabbix, Wazuh, Prometheus, Grafana)](img/alloy-on-monitoring-stack.png)
+
+![Grafana Explore — logs volume by host, confirming the K3s cluster is reachable through Loki](img/ks3-on-loki-metric.png)
+
+### Pitfalls hit during rollout
+
+- **Corrupted binary, not a config problem.** The control node's `/tmp` is a small tmpfs (356–482 MB). Extracting the ~450 MB Alloy binary there truncates it silently — `unzip` warns but Ansible's `unarchive` still reports success on the *next* run because its `creates:` guard sees a file already exists and skips re-extracting, even though that file is broken. The playbook stages the download under the control node's home directory instead of `/tmp`.
+- Ansible's `changed: false` on `copy`/`unarchive` means "already matches", not "already correct" — a corrupted source file gets faithfully replicated to every host without complaint. Worth testing the binary (`--version`) on the control node before trusting a rollout that reports all green.

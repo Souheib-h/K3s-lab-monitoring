@@ -1,0 +1,14 @@
+[Unit]
+Description=Grafana Alloy telemetry collector
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/alloy run /etc/alloy/config.alloy --storage.path=/var/lib/alloy
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/var/log/alloy/alloy.log
+StandardError=append:/var/log/alloy/alloy-error.log
+
+[Install]
+WantedBy=multi-user.target
