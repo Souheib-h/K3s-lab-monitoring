@@ -256,7 +256,7 @@ Result: **12/13 hosts** shipping logs (`ansible-srv` excluded — its `/tmp` ran
 
 ![Alloy deployed and shipping logs from a K3s node](img/alloy-on-k3s.png)
 
-![Alloy deployed and shipping logs from the monitoring stack (Zabbix, Wazuh, Prometheus, Grafana)](img/alloy-on-monitoring-stack.png)
+![Alloy deployed and shipping logs from the monitoring stack — Zabbix, Wazuh, Prometheus, Grafana](img/alloy-on-monitoring-stack.png)
 
 ![Grafana Explore — logs volume by host, confirming the K3s cluster is reachable through Loki](img/ks3-on-loki-metric.png)
 
