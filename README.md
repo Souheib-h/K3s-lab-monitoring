@@ -27,8 +27,8 @@ Everything is documented phase by phase, including architecture decisions (ADR) 
   K3s-srv-2      10.10.0.12                 Wazuh-srv      10.20.0.11
   K3s-srv-3      10.10.0.13                 Prometheus-srv 10.20.0.12
   K3s-agent-1    10.10.0.31                 Grafana-srv    10.20.0.13
-  K3s-agent-2    10.10.0.32                 Ansible-srv    10.20.0.125
-  K3s-agent-3    10.10.0.33
+  K3s-agent-2    10.10.0.32                 Loki-srv       10.20.0.14
+  K3s-agent-3    10.10.0.33                 Ansible-srv    10.20.0.125
   K3s-db         10.10.0.20
   Load-srvs      10.10.0.10
   OPNsense WAN   10.10.0.254 ────────────── OPNsense LAN  10.20.0.254
