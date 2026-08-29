@@ -1,0 +1,121 @@
+---
+# health-check.yml — Vérification de santé de toutes les VMs du lab
+#
+# Vérifie, par hôte : connectivité réseau croisée (mgmt-net/k3s-net/monitoring-net),
+# charge système, disque, RAM, et statut des services clés (Zabbix agent, Wazuh agent,
+# Alloy si présent).
+#
+# Usage : ansible-playbook -i inventory/hosts.yml playbooks/health-check.yml
+# Usage ciblé : ansible-playbook -i inventory/hosts.yml playbooks/health-check.yml --limit monitoring_stack
+
+- name: Health check du parc
+  hosts: all
+  gather_facts: true
+  vars:
+    disk_warn_threshold: 80   # % d'utilisation disque déclenchant un warning
+    mem_warn_threshold: 90    # % d'utilisation RAM déclenchant un warning
+
+  tasks:
+    # ── 1. Connectivité croisée vers les 3 réseaux du lab ──────────────────
+    - name: Vérifier la route vers mgmt-net (10.30.0.0/24)
+      command: ping -c 2 -W 2 10.30.0.10
+      register: ping_mgmt
+      changed_when: false
+      failed_when: false
+
+    - name: Vérifier la route vers k3s-net (10.10.0.254)
+      command: ping -c 2 -W 2 10.10.0.254
+      register: ping_k3s
+      changed_when: false
+      failed_when: false
+
+    - name: Vérifier la route vers monitoring-net (10.20.0.254)
+      command: ping -c 2 -W 2 10.20.0.254
+      register: ping_monitoring
+      changed_when: false
+      failed_when: false
+
+    # ── 2. Ressources système ───────────────────────────────────────────────
+    - name: Récupérer l'utilisation disque de la racine
+      shell: df -P / | tail -1 | awk '{print $5}' | tr -d '%'
+      register: disk_usage
+      changed_when: false
+
+    - name: Récupérer l'utilisation mémoire
+      shell: free | awk '/Mem:/ {printf "%.0f", $3/$2 * 100}'
+      register: mem_usage
+      changed_when: false
+
+    - name: Récupérer la charge système (load average 1min)
+      shell: cat /proc/loadavg | awk '{print $1}'
+      register: load_avg
+      changed_when: false
+
+    - name: Récupérer l'uptime
+      command: uptime -p
+      register: sys_uptime
+      changed_when: false
+
+    # ── 3. Services clés (tolérant à l'absence — pas tous les hosts les ont) ─
+    - name: Vérifier le statut de zabbix-agent / zabbix-agentd
+      shell: |
+        (systemctl is-active zabbix-agent 2>/dev/null) || \
+        (rc-service zabbix-agentd status 2>/dev/null | grep -o 'started\|stopped') || \
+        echo "not-installed"
+      register: zabbix_status
+      changed_when: false
+
+    - name: Vérifier le statut de wazuh-agent / wazuh-agentd
+      shell: |
+        (systemctl is-active wazuh-agent 2>/dev/null) || \
+        (rc-service wazuh-agentd status 2>/dev/null | grep -o 'started\|stopped') || \
+        echo "not-installed"
+      register: wazuh_status
+      changed_when: false
+
+    - name: Vérifier le statut d'alloy (si déployé)
+      shell: |
+        (systemctl is-active alloy 2>/dev/null) || \
+        (rc-service alloy status 2>/dev/null | grep -o 'started\|stopped') || \
+        echo "not-installed"
+      register: alloy_status
+      changed_when: false
+
+    # ── 4. Synthèse par hôte ─────────────────────────────────────────────────
+    - name: Afficher le rapport de santé
+      debug:
+        msg:
+          - "=== {{ inventory_hostname }} ({{ ansible_host | default('local') }}) ==="
+          - "Uptime          : {{ sys_uptime.stdout }}"
+          - "Load average    : {{ load_avg.stdout }}"
+          - "Disque /        : {{ disk_usage.stdout }}% {{ '⚠️  AU DESSUS DU SEUIL' if disk_usage.stdout | int >= disk_warn_threshold else '✅' }}"
+          - "RAM             : {{ mem_usage.stdout }}% {{ '⚠️  AU DESSUS DU SEUIL' if mem_usage.stdout | int >= mem_warn_threshold else '✅' }}"
+          - "Route mgmt-net  : {{ '✅ OK' if ping_mgmt.rc == 0 else '❌ ÉCHEC' }}"
+          - "Route k3s-net   : {{ '✅ OK' if ping_k3s.rc == 0 else '❌ ÉCHEC' }}"
+          - "Route monitoring: {{ '✅ OK' if ping_monitoring.rc == 0 else '❌ ÉCHEC' }}"
+          - "Zabbix agent    : {{ zabbix_status.stdout }}"
+          - "Wazuh agent     : {{ wazuh_status.stdout }}"
+          - "Alloy           : {{ alloy_status.stdout }}"
+
+    # ── 5. Marquer les hôtes en échec pour le récap final ───────────────────
+    - name: Marquer un échec réseau
+      set_fact:
+        network_ok: "{{ ping_mgmt.rc == 0 and ping_k3s.rc == 0 and ping_monitoring.rc == 0 }}"
+
+    - name: Marquer un échec de ressources
+      set_fact:
+        resources_ok: "{{ disk_usage.stdout | int < disk_warn_threshold and mem_usage.stdout | int < mem_warn_threshold }}"
+
+- name: Récapitulatif global
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Lister les hôtes avec un problème réseau
+      debug:
+        msg: "⚠️  {{ inventory_hostname }} a un problème de routage réseau"
+      when: not network_ok | default(true)
+
+    - name: Lister les hôtes avec un problème de ressources
+      debug:
+        msg: "⚠️  {{ inventory_hostname }} dépasse un seuil de ressources (disque/RAM)"
+      when: not resources_ok | default(true)

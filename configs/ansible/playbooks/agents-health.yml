@@ -1,0 +1,111 @@
+---
+# agents-health.yml — Vérification détaillée des agents Zabbix, Wazuh, Alloy
+#
+# Contrairement à health-check.yml (vue d'ensemble système), ce playbook se
+# concentre uniquement sur les 3 agents de monitoring/logging : statut,
+# uptime du service, et pour Wazuh, l'état de connexion réel au manager
+# (pas juste "le process tourne").
+#
+# Usage : ansible-playbook -i inventory/hosts.yml playbooks/agents-health.yml
+
+- name: Santé des agents Zabbix / Wazuh / Alloy
+  hosts: all
+  gather_facts: false
+
+  tasks:
+    # ── Zabbix agent ─────────────────────────────────────────────────────
+    - name: Statut du service Zabbix agent
+      shell: |
+        systemctl is-active zabbix-agent 2>/dev/null || \
+        rc-service zabbix-agentd status 2>/dev/null | grep -oE 'started|stopped|crashed' || \
+        echo "not-installed"
+      register: zabbix_service
+      changed_when: false
+
+    - name: Depuis quand le service Zabbix tourne
+      shell: |
+        systemctl show zabbix-agent --property=ActiveEnterTimestamp --value 2>/dev/null || \
+        echo "n/a (Alpine)"
+      register: zabbix_since
+      changed_when: false
+      when: zabbix_service.stdout is search('active|started')
+
+    - name: Vérifier que le port actif Zabbix répond localement
+      shell: ss -tlnp 2>/dev/null | grep -q ':10050' && echo "listening" || echo "not-listening"
+      register: zabbix_port
+      changed_when: false
+      when: zabbix_service.stdout is search('active|started')
+
+    # ── Wazuh agent ──────────────────────────────────────────────────────
+    - name: Statut du service Wazuh agent
+      shell: |
+        systemctl is-active wazuh-agent 2>/dev/null || \
+        rc-service wazuh-agentd status 2>/dev/null | grep -oE 'started|stopped|crashed' || \
+        echo "not-installed"
+      register: wazuh_service
+      changed_when: false
+      when: inventory_hostname != 'wazuh-srv'
+
+    - name: Statut du manager Wazuh (sur wazuh-srv uniquement)
+      command: systemctl is-active wazuh-manager
+      register: wazuh_manager_service
+      changed_when: false
+      failed_when: false
+      when: inventory_hostname == 'wazuh-srv'
+
+    - name: État de connexion réel de l'agent Wazuh au manager
+      shell: |
+        grep -oE "'connected'|'disconnected'|'pending'" /var/ossec/var/run/wazuh-agentd.state 2>/dev/null | head -1 || echo "n/a"
+      register: wazuh_connection
+      changed_when: false
+      when: inventory_hostname != 'wazuh-srv' and wazuh_service.stdout is search('active|started')
+
+    # ── Alloy (logging) ──────────────────────────────────────────────────
+    - name: Statut du service Alloy
+      shell: |
+        systemctl is-active alloy 2>/dev/null || \
+        rc-service alloy status 2>/dev/null | grep -oE 'started|stopped|crashed' || \
+        echo "not-installed"
+      register: alloy_service
+      changed_when: false
+
+    - name: Vérifier qu'Alloy pousse bien vers Loki (dernières lignes de log)
+      shell: |
+        (journalctl -u alloy --since "5 min ago" 2>/dev/null | grep -iE "error|failed" | tail -3) || \
+        (tail -n 50 /var/log/alloy/alloy-error.log 2>/dev/null | grep -iE "error|failed" | tail -3) || \
+        echo "aucune erreur recente / logs indisponibles"
+      register: alloy_errors
+      changed_when: false
+      when: alloy_service.stdout is search('active|started')
+
+    # ── Rapport ──────────────────────────────────────────────────────────
+    - name: Rapport agents pour cet hôte
+      debug:
+        msg:
+          - "=== {{ inventory_hostname }} ==="
+          - "Zabbix agent : {{ zabbix_service.stdout }}{{ ' (port 10050: ' + zabbix_port.stdout + ')' if zabbix_port is defined and zabbix_port.stdout is defined else '' }}"
+          - "{{ 'Wazuh manager : ' + wazuh_manager_service.stdout if inventory_hostname == 'wazuh-srv' else 'Wazuh agent : ' + wazuh_service.stdout + (' (connexion: ' + wazuh_connection.stdout + ')' if wazuh_connection is defined and wazuh_connection.stdout is defined else '') }}"
+          - "Alloy : {{ alloy_service.stdout }}{{ ' — erreurs récentes: ' + alloy_errors.stdout if alloy_errors is defined and alloy_errors.stdout is defined and alloy_errors.stdout != 'aucune erreur recente / logs indisponibles' else '' }}"
+
+- name: Synthèse globale — agents en échec
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Alerter si Zabbix agent inactif
+      debug:
+        msg: "🔴 {{ inventory_hostname }} : Zabbix agent {{ hostvars[inventory_hostname].zabbix_service.stdout }}"
+      when: hostvars[inventory_hostname].zabbix_service.stdout not in ['active', 'started']
+
+    - name: Alerter si Wazuh agent inactif (hors manager)
+      debug:
+        msg: "🔴 {{ inventory_hostname }} : Wazuh agent {{ hostvars[inventory_hostname].wazuh_service.stdout }}"
+      when:
+        - inventory_hostname != 'wazuh-srv'
+        - hostvars[inventory_hostname].wazuh_service.stdout not in ['active', 'started', 'not-installed']
+
+    - name: Alerter si Wazuh manager inactif
+      debug:
+        msg: "🔴 {{ inventory_hostname }} : Wazuh MANAGER {{ hostvars[inventory_hostname].wazuh_manager_service.stdout }}"
+      when:
+        - inventory_hostname == 'wazuh-srv'
+        - hostvars[inventory_hostname].wazuh_manager_service.stdout != 'active'
