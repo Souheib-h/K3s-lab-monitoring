@@ -6,6 +6,13 @@
 
 ---
 
+## Worth reading if you're short on time
+
+- **[The k3snet interface with zero firewall rules](DECISIONS.md#adr-016-missing-pass-rule-on-k3snet-left-the-interface-entirely-inbound-blocked)** : 8 Wazuh agents stuck in `pending`, a routing fix that looked complete but wasn't the real cause, and how `tcpdump` + `pfctl` state tables ruled out four wrong suspects before finding the actual one.
+- **[20 hours lost to one Wazuh default](docs/troubleshooting/wazuh-soc-troubleshooting.md#ts-1-vulnerability-detection-returns-zero-results-on-an-all-in-one-deployment)** : four unrelated bugs stacked on top of each other, each masking the next; why "the scanner reports success but finds nothing" is worth checking *what* it's scanning before *how* it writes results.
+- **[Reversing a router migration cleanly](DECISIONS.md#adr-013-amendment-migration-blocked-by-evaluation-license-limits)** : a FortiGate cutover halted after checking license limits against the topology *before* cutover, documented as a correctly diagnosed constraint, not a failed attempt
+
+---
 ## What this is
 
 This lab extends the K3s cluster with a fully isolated monitoring infrastructure:
