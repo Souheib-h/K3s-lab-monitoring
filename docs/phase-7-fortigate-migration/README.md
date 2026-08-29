@@ -31,4 +31,4 @@ Registered against FortiCloud to activate the permanent evaluation license (limi
 
 ## Status
 
-Not yet cut over — FortiGate VM is up and licensed, OPNsense remains the active router.
+**Blocked** — FortiGate VM was deployed and licensed, but the cutover plan requires more interfaces, firewall policies, and routes than the permanent evaluation license allows (3 each). See [ADR-013 Amendment](/DECISIONS.md#adr-013-amendment--migration-blocked-by-evaluation-license-limits) for the full reasoning. OPNsense remains the active router; the FortiGate VM is retained powered off in case a licensed version becomes available.

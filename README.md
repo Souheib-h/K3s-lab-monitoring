@@ -27,8 +27,8 @@ Everything is documented phase by phase, including architecture decisions (ADR) 
   K3s-srv-2      10.10.0.12                 Wazuh-srv      10.20.0.11
   K3s-srv-3      10.10.0.13                 Prometheus-srv 10.20.0.12
   K3s-agent-1    10.10.0.31                 Grafana-srv    10.20.0.13
-  K3s-agent-2    10.10.0.32                 Ansible-srv    10.20.0.125
-  K3s-agent-3    10.10.0.33
+  K3s-agent-2    10.10.0.32                 Loki-srv       10.20.0.14
+  K3s-agent-3    10.10.0.33                 Ansible-srv    10.20.0.125
   K3s-db         10.10.0.20
   Load-srvs      10.10.0.10
   OPNsense WAN   10.10.0.254 ────────────── OPNsense LAN  10.20.0.254
@@ -41,10 +41,12 @@ The two networks are fully isolated at L2. OPNsense handles all inter-network ro
 ## Stack
 
 | Tool                 | Role                                                                        |
-| -------------------- | --------------------------------------------------------------------------- |
+| --------------------- | --------------------------------------------------------------------------- |
 | **Zabbix 7.4**       | Host metrics (CPU, RAM, disk, network) via agent + infrastructure alerting  |
 | **Prometheus 3.12**  | K8s metrics: kube-state-metrics, kubelet, cAdvisor                         |
 | **Grafana 13.1 OSS** | Unified NOC dashboards: Zabbix + Prometheus datasources                    |
+| **Loki**             | Log aggregation, monolithic deployment, local FS storage                   |
+| **Grafana Alloy**    | Log/metric shipping agent, deployed via Ansible across 12 nodes            |
 | **Wazuh 4.14**       | SOC: SIEM, FIM, brute force active response, CVE scan, VirusTotal          |
 | **OPNsense 26.1**    | Router/firewall between k3s-net and monitoring-net                          |
 | **Ansible**          | Agent deployment + Zabbix host registration ([configs/ansible](configs/ansible)) |
@@ -62,6 +64,8 @@ The two networks are fully isolated at L2. OPNsense handles all inter-network ro
 | 4 | [SOC: Wazuh FIM, active response, CVE, VirusTotal, email alerting](docs/phase-4-soc/README.md) | ✅ Done |
 | 5 | Automation: [Ansible agent rollout](docs/phase-5-ansible/ansible-automation.md) · [Prometheus ↔ K3s scraping](docs/phase-5-ansible/prometheus-k3s-scraping.md) | ✅ Done |
 | 6 | Dashboard suite: Golden Signals, USE/RED, cross-source panels | 🔄 In progress |
+| 7 | [Router migration: OPNsense → FortiGate](docs/phase-7-fortigate-migration/README.md) | 🚫 Blocked (license limits, see [ADR-013 amendment](DECISIONS.md)) |
+| 8 | [Logging: Loki + Grafana Alloy](docs/phase-8-logging/README.md) | ✅ Done |
 
 ---
 

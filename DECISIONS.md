@@ -364,32 +364,38 @@ as-is; revisit if Wazuh publishes newer Alpine builds.
 
 ---
 
-## ADR-013: Replace OPNsense with FortiGate VM
+## ADR-013: Amendment : Migration blocked by evaluation license limits
 
-**Status:** In progress
+**Status:** Blocked
 
 ### Context
 
-OPNsense has served as the inter-network router since Phase 1 (see ADR-002). FortiGate is more widely used in enterprise and government-adjacent environments (relevant to this project's target role), and Fortinet now offers a permanent evaluation license for KVM deployments, removing the earlier licensing objection.
+ADR-013 planned to replace OPNsense with a FortiGate-VM using the permanent evaluation license, keeping IP/route parity so no downstream host would need reconfiguration. During cutover planning, the license's resource ceiling was checked against the lab's actual topology.
+
+The FortiGate-VM permanent evaluation license caps interfaces, firewall policies, and routes at three each (Fortinet official documentation, "Permanent trial mode for FortiGate-VM," *Limitations of the Evaluation VM license*). The lab's topology already requires three interfaces (WAN, `k3s-net`, `monitoring-net`) on its own, before counting any future network such as the planned `mgmt-net` for Bastion-lab. Replicating OPNsense's current ruleset needs more than three firewall policies (inter-network allow rules in both directions, plus outbound NAT per network) and correspondingly more than three routes.
 
 ### Decision
 
-Replace the OPNsense VM with a FortiGate-VM, keeping the same IPs (WAN 10.10.0.254, LAN 10.20.0.254) and the same routing behavior, so no downstream host needs reconfiguration.
+Halt the cutover. OPNsense remains the active router (ADR-002, and the ADR-002 outbound NAT amendment). The FortiGate VM is retained, powered off, in case a licensed version becomes available or the lab topology is later simplified enough to fit within the evaluation limits.
 
 ### Why
 
-- Broader enterprise relevance than OPNsense for portfolio purposes.
-- Permanent evaluation license removes the cost barrier for a lab.
-- IP/route parity means the cutover is isolated to the router itself.
+- Diagnosed early: checking the license ceiling against the topology before cutover avoided a partial migration that would have failed mid-way (interfaces up, policies rejected once the limit was hit).
+- Segmentation is non-negotiable: the two-network separation is a deliberate security boundary (ADR-001), not a detail to sacrifice for an unlicensed feature comparison.
+- No budget justification: a licensed FortiGate is not justified for a personal lab when OPNsense already fulfills the same architectural role (ADR-002).
 
 ### Alternatives rejected
 
-- **Keep OPNsense** — works fine, but FortiGate experience has more weight for the target role.
-- **Time-limited FortiGate trial** — rejected once the permanent evaluation license was confirmed available for KVM/private cloud.
+- Reduce to fewer networks to fit the license: rejected, would undo the security boundary that ADR-001 was written to establish.
+- Purchase a licensed FortiGate: out of scope for a personal lab budget.
+- Continue with a partial ruleset (fewer policies than OPNsense currently enforces): rejected, would leave gaps in the inter-network rules (Zabbix agent, Wazuh agent, Prometheus scrape) that the cutover plan explicitly required to validate before deleting OPNsense.
 
-### Risk noted
+### Consequences
 
 FortiGate's NAT/policy model differs from OPNsense's outbound NAT toggle. The same asymmetric-routing failure mode hit with libvirt's `LIBVIRT_PRT` masquerade chain (ADR-002) is expected to resurface here and must be checked explicitly during cutover.
+- The FortiGate enterprise-relevance goal stated in the original ADR-013 context is not achieved in this lab. OPNsense remains the router of record, unchanged.
+- The attempt is retained as documentation of a correctly diagnosed licensing constraint, not a technical or networking failure — the same asymmetric-routing risk flagged in the original ADR-013 was never even reached.
+- Revisit if a licensed FortiGate becomes available, or if the lab topology is deliberately reduced to three networks or fewer.
 
 ## ADR-014: Canonical static routes to mgmt-net across the fleet
 
