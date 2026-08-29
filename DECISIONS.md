@@ -390,3 +390,36 @@ Replace the OPNsense VM with a FortiGate-VM, keeping the same IPs (WAN 10.10.0.2
 ### Risk noted
 
 FortiGate's NAT/policy model differs from OPNsense's outbound NAT toggle. The same asymmetric-routing failure mode hit with libvirt's `LIBVIRT_PRT` masquerade chain (ADR-002) is expected to resurface here and must be checked explicitly during cutover.
+
+## ADR-014: Canonical static routes to mgmt-net across the fleet
+
+**Date:** 2026-08-29 · **Status:** Accepted
+
+### Context
+
+SSH and ICMP from the bastion (`10.30.0.10`, mgmt-net) to most of the fleet (k3s-net, monitoring-net) failed silently, timeouts with no explicit rejection. OPNsense firewall rules were correct and permissive (`pass` from `10.30.0.10` to `*`), confirmed via `Firewall → Log Files → Live View`: the outbound packet was seen and allowed on the destination interface. No state was ever created in `Firewall → Diagnostics → States` for traffic initiated from the bastion, indicating the reply never made it back.
+
+An Ansible ad-hoc audit (`ip route` across all 13 hosts) showed the actual cause: most VMs receive their routing table via DHCP (`proto dhcp`), which never included a route back to `10.30.0.0/24`. Only `k3s-srv-1`, `load-srv`, and `ansible-srv` had a default route that happened to cover mgmt-net, explaining why they behaved differently from the rest of the fleet during initial triage. VMs without any route to `10.30.0.0/24` accepted the inbound packet but had no way to route the reply, dropping it locally, invisible to the firewall.
+
+### Decision
+
+Deploy a canonical `/etc/netplan/99-routes.yaml` via Ansible on all 13 hosts, explicitly listing static routes to every other lab network (k3s-net, monitoring-net, mgmt-net, k8s-ha-net) rather than relying on DHCP-provided routes for inter-network reachability.
+
+`k3s-srv-1` (the only host on static IP via `50-cloud-init.yaml`, `dhcp4: false`) required manual `netplan apply` via `virsh console` instead of through the Ansible SSH connection, which the interface renegotiation was cutting mid-play.
+
+### Why
+
+- Firewall logs proved the aller path was never the problem, ruling out OPNsense saved significant time once actually consulted; should be the first diagnostic step for any "traffic passes the firewall but nothing comes back" symptom going forward.
+- A single canonical routes file per network side, applied via the existing Ansible pipeline (already used for the k3s-net ↔ monitoring-net route, see original `k3s-cluster-build.md`), keeps routing config in one auditable place instead of depending on whatever OPNsense's DHCP server happens to hand out.
+- `netplan apply` reconciles the full file state, so redeploying this playbook also removes any stale/manual route previously added to the same file, incidental cleanup alongside the fix.
+
+### Alternatives rejected
+
+- **Fix via OPNsense DHCP options** (classless static routes): would have centralized the fix server-side, but static IP hosts (`k3s-srv-1`) don't consume DHCP options at all, so full fleet coverage still requires a per-host static route regardless.
+- **Per-host manual `ip route add`**: works but not persistent across reboot, and not idempotent/auditable the way a versioned netplan file is.
+
+### Consequences
+
+- Routing is now split across two sources of truth per host: DHCP-provided routes (host's own network + WAN-adjacent) and the static `99-routes.yaml` (everything cross-network). Acceptable, but worth remembering if a future network is added, it needs an entry in this file, not just an OPNsense DHCP scope.
+- This likely explains, retroactively, part of the previously undiagnosed `k3s-db` Ansible unreachability documented earlier in the project history. Not confirmed as the sole cause, flagged here in case a similar symptom resurfaces on a host not yet covered.
+- Full diagnostic trail: `docs/troubleshooting/troubleshooting-bastion-routing-2026-08-29.md`.
