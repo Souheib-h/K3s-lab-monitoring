@@ -1,0 +1,13 @@
+---
+- name: Audit des routes IP sur toutes les VMs
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Récupérer la table de routage
+      shell: ip route
+      register: routes
+      changed_when: false
+
+    - name: Afficher les routes
+      debug:
+        msg: "{{ routes.stdout_lines }}"

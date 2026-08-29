@@ -1,0 +1,52 @@
+---
+- name: Nettoyer et reconstruire les routes statiques - côté k3s-net
+  hosts: k3s-srv-1,k3s-srv-2,k3s-srv-3,k3s-agent-1,k3s-agent-2,k3s-agent-3,k3s-db
+  become: true
+  tasks:
+    - name: Écrire la config netplan canonique (remplace l'ancienne)
+      copy:
+        dest: /etc/netplan/99-routes.yaml
+        content: |
+          network:
+            version: 2
+            ethernets:
+              enp1s0:
+                routes:
+                  - to: 10.20.0.0/24
+                    via: 10.10.0.254
+                  - to: 10.30.0.0/24
+                    via: 10.10.0.254
+                  - to: 10.40.0.0/24
+                    via: 10.10.0.254
+        mode: '0600'
+      register: netplan_file
+
+    - name: Appliquer netplan (reconcilie et supprime les routes obsolètes)
+      command: netplan apply
+      when: netplan_file.changed
+
+- name: Nettoyer et reconstruire les routes statiques - côté monitoring-net
+  hosts: zabbix-srv,wazuh-srv,prometheus-srv,grafana-srv
+  become: true
+  tasks:
+    - name: Écrire la config netplan canonique (remplace l'ancienne)
+      copy:
+        dest: /etc/netplan/99-routes.yaml
+        content: |
+          network:
+            version: 2
+            ethernets:
+              enp1s0:
+                routes:
+                  - to: 10.10.0.0/24
+                    via: 10.20.0.254
+                  - to: 10.30.0.0/24
+                    via: 10.20.0.254
+                  - to: 10.40.0.0/24
+                    via: 10.20.0.254
+        mode: '0600'
+      register: netplan_file
+
+    - name: Appliquer netplan (reconcilie et supprime les routes obsolètes)
+      command: netplan apply
+      when: netplan_file.changed

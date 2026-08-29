@@ -1,0 +1,13 @@
+# cleanup-old-ansible-key.yml
+---
+- name: Retirer uniquement l'ancienne clé ansible-control orpheline
+  hosts: all
+  gather_facts: false
+  vars:
+    old_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKb+UUZiCtnRcHGKHbNUX9gPQTDVMcrtF1/Ya4pAffVG ansible-control"
+  tasks:
+    - name: Supprimer la clé orpheline précise
+      lineinfile:
+        path: ~/.ssh/authorized_keys
+        line: "{{ old_key }}"
+        state: absent
