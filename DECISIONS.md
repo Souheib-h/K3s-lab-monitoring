@@ -511,3 +511,54 @@ Validated with a full cold reboot of `Ansible-srv` (not just an in-memory `ip ro
 - The fleet now has **three** route-management mechanisms for the same logical requirement (netplan for Ubuntu, `/etc/network/interfaces` for Alpine, and OPNsense's own routing table) — acceptable given the lab's mixed-OS design (ADR-011), but any *future* route change must be applied in both places, not just netplan.
 - `load-srv` (Alpine, k3s-net) and `Bastion-srv` were not re-verified in this session and should be checked for the same gap before being trusted as fully covered by ADR-014/015.
 - Editing `/etc/network/interfaces` on a live Alpine host now has a documented failure mode (silent single-character corruption breaking interface parsing) — future edits should `cat` the file back immediately after saving, before restarting any network service, and prefer testing via a hypervisor console session over SSH when touching the file a host's own SSH session depends on.
+## ADR-016: Missing pass rule on k3snet left the interface entirely inbound-blocked
+
+**Date:** 2026-08-29 · **Status:** Accepted
+
+### Context
+
+Following the ADR-014/015 route fixes, a routine `health-check.yml` playbook run surfaced a new symptom unrelated to routing: all 8 hosts on `k3s-net` (k3s-srv-1/2/3, k3s-agent-1/2/3, k3s-db, load-srv) reported their Wazuh agent status as `pending`, never `connected`, despite the agent process being active on every host.
+
+Initial diagnosis suspected a repeat of the same routing gap (ADR-014/015), but the evidence pointed elsewhere:
+
+- `ping` from any k3s-net host to `10.10.0.254` (OPNsense's own IP on the k3snet interface) failed 100%, but **`ping` from OPNsense to any k3s-net host succeeded**, an asymmetric failure the previous ADRs' routing fixes cannot explain (routes were confirmed correct on both sides).
+- A `tcpdump -i vtnet1` capture on OPNsense's own k3snet interface **showed the ICMP echo requests arriving** from the k3s-net hosts, ruling out the bridge, the hypervisor's `iptables`/`ufw` FORWARD chain (a `DEFAULT_FORWARD_POLICY="DROP"` misconfiguration was found and fixed along the way, unrelated to this issue, see Consequences), and the VM's own routing table.
+- `pfctl -sr | grep icmp` on OPNsense showed only the default IPv6 RFC4890 rules, no IPv4 ICMP rule at all.
+- `pfctl -ss` showed no state was ever created for the ICMP traffic, meaning `pf` dropped the packets before even considering them for a state, the traffic never matched any `pass` rule.
+- The `Firewall → Rules → k3snet` page itself stated plainly: *"No k3snet rules are currently defined. All incoming connections on this interface will be blocked until you add a pass rule."*
+
+The `k3snet` interface had never had an explicit pass rule since its creation in Phase 1 (ADR-001/002), unlike `LAN` (monitoring-net), which has carried an explicit `"Allow Bastion-srv only into monitoring-net"` rule since Bastion-lab was added. This had gone unnoticed because all of the lab's normal traffic patterns are initiated *from* monitoring-net *into* k3s-net (Prometheus scraping kubelet/cAdvisor, SSH via the bastion, Ansible), or *by* OPNsense itself (which is not subject to its own interface's inbound rules for self-initiated traffic). No prior workflow required a k3s-net host to initiate outbound traffic past its own subnet until this session's ping diagnostics and the Wazuh agent's manager-directed traffic (port 1514/1515) surfaced it.
+
+### Decision
+
+Add an explicit pass rule on the `k3snet` interface:
+
+```
+Action: Pass
+Interface: k3snet
+Direction: in
+TCP/IP Version: IPv4
+Protocol: any
+Source: k3snet net
+Destination: any
+Description: Allow k3s-net outbound to all lab networks
+```
+
+Mirrors the existing pattern already in place on `LAN` (monitoring-net) and `BASTION`, both of which have explicit outbound-allow rules for their respective subnets.
+
+### Why
+
+- Symmetry with existing interfaces: every other interface in the topology (LAN, BASTION) already had this exact kind of rule; k3snet was the outlier, not a special case that needed different treatment.
+- `pf`'s per-interface default-deny behavior means an interface with zero rules blocks all *inbound* traffic to that interface regardless of what the routing table or the bridge allows, confirmed directly by OPNsense's own UI warning banner, which should have been checked before spending time on `tcpdump`/`pfctl` state analysis.
+- Fixing the rule rather than reactively allowing single ports (e.g., just 1514/1515 for Wazuh) restores k3snet to the same general-purpose reachability every other lab network has, since more asymmetric-failure symptoms of the same root cause are likely to surface later (e.g., NTP, DNS, or future agent traffic initiated from k3s-net).
+
+### Alternatives rejected
+
+- **Narrow rule scoped only to Wazuh's ports (1514/1515 TCP/UDP)**: would have fixed the immediate symptom but left the interface in the same fragile, inconsistent state relative to every other interface, and virtually guaranteed a repeat of this exact diagnostic session the next time a different k3s-net-initiated flow was needed.
+- **Leave k3snet rule-less and route Wazuh traffic through the bastion instead**: rejected as unnecessary complexity; the interface's default-deny-on-inbound is not a security boundary anyone deliberately designed for k3s-net (compare to the genuinely deliberate isolation in ADR-001), it was an oversight, not a policy.
+
+### Consequences
+
+- **A red herring correction made along the way, kept for the record**: `iptables -L FORWARD -n -v` on the hypervisor (My-ship) showed `policy DROP`, traced to `/etc/default/ufw`'s `DEFAULT_FORWARD_POLICY="DROP"`, likely altered by the `ufw disable`/`ufw enable` cycle performed accidentally at the very start of this session's original troubleshooting (see ADR-014's initial symptom investigation). Corrected to `ACCEPT` (`sed` + `ufw reload`) since a routing hypervisor should default to forwarding. **This fix was necessary and correct to keep, but was not the actual cause of the k3snet symptom** — worth remembering that two real misconfigurations coexisting during the same diagnostic session is possible and each needs independent confirmation, not just "the ping works now" after any one fix.
+- All 8 previously-`pending` Wazuh agents confirmed `connected` immediately after the rule was applied, closing the loop from symptom (health-check playbook) to root cause (missing firewall rule) to fix, with functional validation, not just a ping test.
+- `docs/phase-1-network/README.md`'s OPNsense configuration section should be updated to explicitly call out the pass rule per interface as a required step, not just implied by "add rules as needed" — the absence of this explicit callout is likely why k3snet was missed when the interface was first created.
