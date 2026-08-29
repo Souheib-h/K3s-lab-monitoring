@@ -364,7 +364,36 @@ as-is; revisit if Wazuh publishes newer Alpine builds.
 
 ---
 
-## ADR-013: Amendment : Migration blocked by evaluation license limits
+## ADR-013: Replace OPNsense with FortiGate VM
+
+**Status:** In progress
+
+### Context
+
+OPNsense has served as the inter-network router since Phase 1 (see ADR-002). FortiGate is more widely used in enterprise and government-adjacent environments (relevant to this project's target role), and Fortinet now offers a permanent evaluation license for KVM deployments, removing the earlier licensing objection.
+
+### Decision
+
+Replace the OPNsense VM with a FortiGate-VM, keeping the same IPs (WAN 10.10.0.254, LAN 10.20.0.254) and the same routing behavior, so no downstream host needs reconfiguration.
+
+### Why
+
+- Broader enterprise relevance than OPNsense for portfolio purposes.
+- Permanent evaluation license removes the cost barrier for a lab.
+- IP/route parity means the cutover is isolated to the router itself.
+
+### Alternatives rejected
+
+- **Keep OPNsense** — works fine, but FortiGate experience has more weight for the target role.
+- **Time-limited FortiGate trial** — rejected once the permanent evaluation license was confirmed available for KVM/private cloud.
+
+### Risk noted
+
+FortiGate's NAT/policy model differs from OPNsense's outbound NAT toggle. The same asymmetric-routing failure mode hit with libvirt's `LIBVIRT_PRT` masquerade chain (ADR-002) is expected to resurface here and must be checked explicitly during cutover.
+
+---
+
+## ADR-013 Amendment: Migration blocked by evaluation license limits
 
 **Status:** Blocked
 
@@ -392,10 +421,12 @@ Halt the cutover. OPNsense remains the active router (ADR-002, and the ADR-002 o
 
 ### Consequences
 
-FortiGate's NAT/policy model differs from OPNsense's outbound NAT toggle. The same asymmetric-routing failure mode hit with libvirt's `LIBVIRT_PRT` masquerade chain (ADR-002) is expected to resurface here and must be checked explicitly during cutover.
+- FortiGate's NAT/policy model differs from OPNsense's outbound NAT toggle. The same asymmetric-routing failure mode hit with libvirt's `LIBVIRT_PRT` masquerade chain (ADR-002) is expected to resurface here and must be checked explicitly during cutover — never reached, but flagged for any future attempt.
 - The FortiGate enterprise-relevance goal stated in the original ADR-013 context is not achieved in this lab. OPNsense remains the router of record, unchanged.
-- The attempt is retained as documentation of a correctly diagnosed licensing constraint, not a technical or networking failure — the same asymmetric-routing risk flagged in the original ADR-013 was never even reached.
+- The attempt is retained as documentation of a correctly diagnosed licensing constraint, not a technical or networking failure.
 - Revisit if a licensed FortiGate becomes available, or if the lab topology is deliberately reduced to three networks or fewer.
+
+---
 
 ## ADR-014: Canonical static routes to mgmt-net across the fleet
 
@@ -429,3 +460,54 @@ Deploy a canonical `/etc/netplan/99-routes.yaml` via Ansible on all 13 hosts, ex
 - Routing is now split across two sources of truth per host: DHCP-provided routes (host's own network + WAN-adjacent) and the static `99-routes.yaml` (everything cross-network). Acceptable, but worth remembering if a future network is added, it needs an entry in this file, not just an OPNsense DHCP scope.
 - This likely explains, retroactively, part of the previously undiagnosed `k3s-db` Ansible unreachability documented earlier in the project history. Not confirmed as the sole cause, flagged here in case a similar symptom resurfaces on a host not yet covered.
 - Full diagnostic trail: `docs/troubleshooting/troubleshooting-bastion-routing-2026-08-29.md`.
+
+---
+
+## ADR-015: netplan-only route fix left Alpine hosts uncovered
+
+**Date:** 2026-08-29 · **Status:** Accepted
+
+### Context
+
+ADR-014 deployed a canonical static-routes file to fix missing routes back to `mgmt-net` (10.30.0.0/24) across the fleet, but the fix was written and validated only against **netplan**, which does not exist on Alpine Linux. Alpine hosts (`Ansible-srv`, and by extension `load-srv`, `Bastion-srv`) manage networking through `/etc/network/interfaces` instead, and were silently left out of ADR-014's coverage.
+
+The gap surfaced during a later session, on a fresh full-fleet reboot: `ssh ansible-srv` hung with the same symptom ADR-014 had just fixed everywhere else. `ip route` on `Ansible-srv` confirmed no route to `10.30.0.0/24`, and a ping toward the bastion returned `Destination Port Unreachable` **from `10.20.0.1`** (the libvirt NAT gateway), not from OPNsense (`10.20.0.254`) — proof the packet was falling through to the default route instead of being routed via OPNsense, exactly the ADR-014 failure mode, on a host ADR-014 never touched.
+
+A manual fix attempt made things briefly worse: editing `/etc/network/interfaces` by hand dropped the leading `i` from `iface eth0 inet static` (`face eth0 inet static`), which Alpine's `ifup` parses as an orphaned block, orphaning the `address`/`gateway` lines under it (`address '10.20.0.125' without interface`). Restarting the networking service in that state briefly took the host's networking down entirely. Recovered via `virsh console` (never dependent on the network) and a from-scratch manual `ip addr` / `ip route` sequence, then a corrected file.
+
+### Decision
+
+Extend route coverage to Alpine hosts via `/etc/network/interfaces`, using `up ip route add` directives mirroring the netplan file's routes, with the **correct default gateway** (`10.20.0.1`, the network's actual default gateway — not `10.20.0.254`, which is OPNsense's role as inter-network router only, a distinction blurred during the manual recovery and worth stating explicitly here):
+
+```
+auto lo
+iface lo inet loopback
+
+auto eth0
+iface eth0 inet static
+    address 10.20.0.125
+    netmask 255.255.255.0
+    gateway 10.20.0.1
+    up ip route add 10.10.0.0/24 via 10.20.0.254 dev eth0
+    up ip route add 10.30.0.0/24 via 10.20.0.254 dev eth0
+    up ip route add 10.40.0.0/24 via 10.20.0.254 dev eth0
+```
+
+Validated with a full cold reboot of `Ansible-srv` (not just an in-memory `ip route add`, which ADR-014's fix had already relied on for its own validation) — SSH via the full bastion ProxyJump succeeded immediately post-boot, confirming the file is correctly parsed and applied on startup, not just patched live.
+
+### Why
+
+- ADR-014's own troubleshooting section warned that "DHCP and static configuration coexisting on the same lab creates heterogeneous routing topologies hard to audit visually" — this gap is a direct instance of that warning going unheeded across a different axis (OS/network-manager, not DHCP/static).
+- A live `ip route add` is not sufficient validation for a persistence fix; only a real reboot proves the on-disk config is both syntactically valid and functionally correct. This session's own incident (a typo silently accepted by `vi`, only surfaced by `rc-service networking restart`) reinforces this.
+- Fixing forward (extending route coverage) rather than migrating Alpine hosts to a different network manager avoids introducing a second migration mid-incident.
+
+### Alternatives rejected
+
+- **Migrate Alpine hosts off `/etc/network/interfaces` to a netplan-compatible manager**: unnecessary scope increase for a routing gap; Alpine's native networking is otherwise working as designed (ADR-011 chose Alpine specifically for its minimal footprint).
+- **Add the missing routes only in memory, revisit persistence later**: rejected after this session's incident showed that "works right now" and "survives a reboot" are not the same claim, and the two can diverge exactly when least convenient (mid-diagnosis, multiple VMs already down for testing).
+
+### Consequences
+
+- The fleet now has **three** route-management mechanisms for the same logical requirement (netplan for Ubuntu, `/etc/network/interfaces` for Alpine, and OPNsense's own routing table) — acceptable given the lab's mixed-OS design (ADR-011), but any *future* route change must be applied in both places, not just netplan.
+- `load-srv` (Alpine, k3s-net) and `Bastion-srv` were not re-verified in this session and should be checked for the same gap before being trusted as fully covered by ADR-014/015.
+- Editing `/etc/network/interfaces` on a live Alpine host now has a documented failure mode (silent single-character corruption breaking interface parsing) — future edits should `cat` the file back immediately after saving, before restarting any network service, and prefer testing via a hypervisor console session over SSH when touching the file a host's own SSH session depends on.
