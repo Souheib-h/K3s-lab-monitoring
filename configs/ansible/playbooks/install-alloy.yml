@@ -42,6 +42,27 @@
       ansible.builtin.command: "{{ alloy_staging }}/alloy-linux-amd64 --version"
       changed_when: false
 
+    # The control node disk is small: keep only the extracted current version
+    - name: Remove the downloaded zip
+      ansible.builtin.file:
+        path: "{{ alloy_staging }}/alloy.zip"
+        state: absent
+
+    - name: Find staging content from other versions
+      ansible.builtin.find:
+        paths: "{{ alloy_staging | dirname }}"
+        file_type: any
+        excludes: "{{ alloy_version }}"
+      register: old_staging
+
+    - name: Remove staging content from other versions
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ old_staging.files }}"
+      loop_control:
+        label: "{{ item.path }}"
+
 - name: Deploy Grafana Alloy agents
   hosts: all:!ansible_control
   become: true

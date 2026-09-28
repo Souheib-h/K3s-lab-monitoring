@@ -64,6 +64,8 @@ OPNsense 26.1 deployed as a dedicated VM with:
 
 libvirt's nftables/iptables masquerade chain (`LIBVIRT_PRT`) rewrites source IPs before custom routing can work. Fix: switch libvirt firewall backend to `iptables`, add `RETURN` rules to exempt inter-network traffic, disable outbound NAT on OPNsense.
 
+> **Superseded (2026-09-28).** After the hypervisor was reinstalled, libvirt runs its default **nftables** backend, `LIBVIRT_PRT` and the `RETURN` rules no longer exist, and inter-network routing works unchanged: VMs reach other networks through OPNsense at L2, so the host's masquerade is not on that path. libvirt's `guest_input` / `guest_output` chains also reject new connections routed between its bridges through the host (see ADR-016 amendment).
+
 ### Update  outbound NAT: Disable is too broad, Hybrid is correct
 
 **Status:** Revised (2026-07-23)
@@ -366,6 +368,8 @@ the OPNsense firewall VM and the Arch hypervisor.
 **Consequences.** `ansible all` covers exactly the 13 lab hosts. Firewall and
 hypervisor changes remain manual and documented.
 
+> **Update (2026-09-28).** My-ship was reinstalled (new Arch install, same hostname) and the lab restored from backups. The hypervisor's Zabbix and Wazuh agents were not reinstalled yet (`inactive`), so the hypervisor is currently **not monitored**.
+
 ---
 
 ## ADR-013: Replace OPNsense with FortiGate VM
@@ -569,3 +573,53 @@ Mirrors the existing pattern already in place on `LAN` (monitoring-net) and `BAS
 - **A red herring correction made along the way, kept for the record**: `iptables -L FORWARD -n -v` on the hypervisor (My-ship) showed `policy DROP`, traced to `/etc/default/ufw`'s `DEFAULT_FORWARD_POLICY="DROP"`, likely altered by the `ufw disable`/`ufw enable` cycle performed accidentally at the very start of this session's original troubleshooting (see ADR-014's initial symptom investigation). Corrected to `ACCEPT` (`sed` + `ufw reload`) since a routing hypervisor should default to forwarding. **This fix was necessary and correct to keep, but was not the actual cause of the k3snet symptom** — worth remembering that two real misconfigurations coexisting during the same diagnostic session is possible and each needs independent confirmation, not just "the ping works now" after any one fix.
 - All 8 previously-`pending` Wazuh agents confirmed `connected` immediately after the rule was applied, closing the loop from symptom (health-check playbook) to root cause (missing firewall rule) to fix, with functional validation, not just a ping test.
 - `docs/phase-1-network/README.md`'s OPNsense configuration section should be updated to explicitly call out the pass rule per interface as a required step, not just implied by "add rules as needed" — the absence of this explicit callout is likely why k3snet was missed when the interface was first created.
+
+### Amendment (2026-09-28): least-privilege rules replace `k3snet net → any`
+
+**Status:** Accepted, supersedes the Decision above.
+
+The `Source: k3snet net → Destination: any` rule fixed the agents but let any cluster node (or a compromised pod) open connections to every other lab network: Wazuh API `55000` and indexer `9200`, Zabbix, Grafana, Loki (no auth) and the bastion. This was verified from `k3s-srv-1`: `nc 10.20.0.11 55000` succeeded. It also made Bastion-lab's claim that lab hosts cannot reach the bastion false.
+
+The rule was replaced by flows that k3s-net actually initiates, found by logging the old rule for a while (Live View) before disabling it:
+
+| Rule | Source | Destination | Port | Purpose |
+|---|---|---|---|---|
+| R1 | k3snet net | 10.20.0.11 | TCP 1514-1515 | Wazuh agents → manager (events, enrollment) |
+| R2 | k3snet net | 10.20.0.10 | TCP 10051 | Zabbix active checks |
+| R3 | k3snet net | 10.20.0.14 | TCP 3100 | Alloy → Loki |
+| R4 | k3snet net | This Firewall | ICMP echo | Diagnostics ping to OPNsense |
+| R5 | k3snet net | **not** `RFC1918` alias | `EGRESS_PORTS` alias (TCP/UDP 80, 443, 123) | Internet only: apt, image pulls, NTP (ADR-017) |
+
+Everything else is blocked by the interface default deny. Traffic *into* k3s-net (Prometheus scrapes, SSH from the bastion, Ansible) is unaffected: it is initiated from other interfaces and its replies match the state table.
+
+The old rule is kept **disabled** (`TEMP catch-all - to remove`) as a one-click rollback until the new set has run for a few days.
+
+**Verification (2026-09-28):** from `k3s-srv-1`, 1514 and HTTPS to Ubuntu succeed, NTP syncs, `55000` times out. `agents-health.yml`: all 12 Wazuh agents `connected` with the old rule disabled. `health-check.yml` now treats the bastion as a policy check: unreachable from k3s-net is the expected result.
+
+**Pitfall hit:** a typo in the port alias (`433` instead of `443`) blocked HTTPS while NTP worked. Live View showed the retried SYNs to `:443` hitting the default deny; the alias Content column made it obvious.
+
+**Hypervisor bypass ruled out:** forcing a route to `10.20.0.11` via the libvirt gateway `10.10.0.1` is rejected by libvirt's own nftables rules (`guest_input` only accepts `established,related` into each bridge), so OPNsense is the only path between lab networks.
+
+---
+
+## ADR-017: k3s-net reaches the Internet through OPNsense
+
+**Date:** 2026-09-28 · **Status:** Accepted
+
+### Context
+
+K3s refuses to start without a default route. The Ubuntu k3s-net nodes had none, so a local playbook (`fix-default-route.yml`, never committed) added `default via 10.10.0.254` and inserted it into `/etc/netplan/99-routes.yaml`. `fix-routes.yml` rewrites that same file in full without a default route: running it would have silently removed the route and taken K3s down at the next restart.
+
+### Decision
+
+The default route via OPNsense is part of the canonical `99-routes.yaml` written by `fix-routes.yml`. `fix-default-route.yml` is retired. The play only *starts* `k3s` / `k3s-agent` if they are down; it never restarts a running control plane.
+
+### Why
+
+- One source of truth for routes, so a rerun cannot drop the default route.
+- All cluster egress crosses OPNsense, so rule R5 (ADR-016 amendment) filters it: Internet on 80/443/123 only, never another lab network.
+
+### Consequences
+
+- `load-srv` (Alpine) keeps its own route in `/etc/network/interfaces` (`up ip route add default via 10.10.0.254`). It also receives `default via 10.10.0.1 metric 202` from DHCP: if OPNsense is down, load-srv falls back to direct NAT through the hypervisor, unfiltered. Accepted for a lab.
+- If OPNsense is down, the other k3s nodes lose Internet access (image pulls, apt, NTP); in-cluster traffic is unaffected.

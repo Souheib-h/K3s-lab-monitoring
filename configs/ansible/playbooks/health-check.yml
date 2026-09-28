@@ -2,6 +2,8 @@
 # health-check.yml — Vérification de santé de toutes les VMs du lab
 #
 # Vérifie, par hôte : connectivité réseau croisée (bastion-net/k3s-net/monitoring-net),
+# y compris la segmentation : depuis k3s-net, le bastion doit être INJOIGNABLE
+# (règles k3snet, amendement ADR-016). S'il répond, c'est une régression.
 # charge système, disque, RAM, et statut des services clés (Zabbix agent, Wazuh agent,
 # Alloy si présent).
 #
@@ -25,7 +27,7 @@
 
   tasks:
     # ── 1. Connectivité croisée vers les 3 réseaux du lab ──────────────────
-    - name: Vérifier la route vers bastion-net (10.30.0.10)
+    - name: Tester l'accès au bastion (10.30.0.10) — attendu joignable sauf depuis k3s-net
       ansible.builtin.command: ping -c 2 -W 2 10.30.0.10
       register: ping_bastion
       changed_when: false
@@ -88,7 +90,9 @@
           - "Load average    : {{ load_avg }}"
           - "Disque /        : {{ disk_usage }}% {{ '⚠️  AU DESSUS DU SEUIL' if disk_usage | int >= disk_warn_threshold else '✅' }}"
           - "RAM             : {{ mem_usage }}% {{ '⚠️  AU DESSUS DU SEUIL' if mem_usage | int >= mem_warn_threshold else '✅' }}"
-          - "Route bastion   : {{ '✅ OK' if ping_bastion.rc == 0 else '❌ ÉCHEC' }}"
+          - "{{ ('Isolation bastion: ' ~ ('✅ bloqué' if ping_bastion.rc != 0 else '❌ JOIGNABLE depuis k3s-net'))
+                if 'k3s_nodes' in group_names
+                else ('Route bastion   : ' ~ ('✅ OK' if ping_bastion.rc == 0 else '❌ ÉCHEC')) }}"
           - "Route k3s-net   : {{ '✅ OK' if ping_k3s.rc == 0 else '❌ ÉCHEC' }}"
           - "Route monitoring: {{ '✅ OK' if ping_monitoring.rc == 0 else '❌ ÉCHEC' }}"
           - "Zabbix agent    : {{ zabbix_status }}"
@@ -98,7 +102,7 @@
     # ── 5. Marquer les hôtes en échec pour le récap final ───────────────────
     - name: Marquer les échecs réseau et ressources
       ansible.builtin.set_fact:
-        network_ok: "{{ ping_bastion.rc == 0 and ping_k3s.rc == 0 and ping_monitoring.rc == 0 }}"
+        network_ok: "{{ ((ping_bastion.rc != 0) if 'k3s_nodes' in group_names else (ping_bastion.rc == 0)) and ping_k3s.rc == 0 and ping_monitoring.rc == 0 }}"
         resources_ok: "{{ disk_usage | int < disk_warn_threshold and mem_usage | int < mem_warn_threshold }}"
 
 - name: Récapitulatif global
@@ -107,7 +111,7 @@
   tasks:
     - name: Lister les hôtes avec un problème réseau
       ansible.builtin.debug:
-        msg: "⚠️  {{ inventory_hostname }} a un problème de routage réseau"
+        msg: "⚠️  {{ inventory_hostname }} : routage ou segmentation non conforme (voir le rapport)"
       when: not network_ok | default(true)
 
     - name: Lister les hôtes avec un problème de ressources
