@@ -128,8 +128,9 @@ absence, not its `null` value, as an old-format signal.
   Zero external dependencies, no node_exporter required.
 - **Datasource:** Prometheus; pick the scrape job and instance(s) with
   the `$job` / `$instance` variables after import
-- **Republish needed:** the variables were added after the first upload,
-  the Grafana.com revision still has `job="prometheus"` hardcoded
+- **Revisions:** rev 1 (2026-07-06) hardcoded `job="prometheus"`; rev 2
+  (2026-09-28) adds the `$job` / `$instance` variables and the WAL
+  Corruptions / Ingestion Rate fixes
 
 ![Dashboard live on Grafana.com](img/grafana-self-monitoring-dashboard-listed.png)
 
