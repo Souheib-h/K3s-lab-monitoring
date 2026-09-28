@@ -185,7 +185,7 @@ Zabbix is retained for:
 
 ### Context
 
-Agents need to be deployed on all 10 monitored VMs. Manual installation is not repeatable.
+Agents need to be deployed on all 13 monitored VMs. Manual installation is not repeatable.
 
 ### Decision
 
@@ -201,7 +201,7 @@ Phase 5 Ansible deploys:
 - Repeatability: one playbook run restores the full agent stack on any VM
 - Consistency: same config across all nodes, no manual drift
 - Scope reduction: dropping node_exporter simplifies the playbook without losing any capability
-- Portfolio value: Ansible automation across a 10-VM lab demonstrates IaC skills
+- Portfolio value: Ansible automation across a 13-VM lab demonstrates IaC skills
 
 ### Alternatives rejected
 
@@ -366,7 +366,7 @@ as-is; revisit if Wazuh publishes newer Alpine builds.
 
 ## ADR-013: Replace OPNsense with FortiGate VM
 
-**Status:** In progress
+**Status:** Blocked, see amendment below
 
 ### Context
 
@@ -511,6 +511,9 @@ Validated with a full cold reboot of `Ansible-srv` (not just an in-memory `ip ro
 - The fleet now has **three** route-management mechanisms for the same logical requirement (netplan for Ubuntu, `/etc/network/interfaces` for Alpine, and OPNsense's own routing table) — acceptable given the lab's mixed-OS design (ADR-011), but any *future* route change must be applied in both places, not just netplan.
 - `load-srv` (Alpine, k3s-net) and `Bastion-srv` were not re-verified in this session and should be checked for the same gap before being trusted as fully covered by ADR-014/015.
 - Editing `/etc/network/interfaces` on a live Alpine host now has a documented failure mode (silent single-character corruption breaking interface parsing) — future edits should `cat` the file back immediately after saving, before restarting any network service, and prefer testing via a hypervisor console session over SSH when touching the file a host's own SSH session depends on.
+
+---
+
 ## ADR-016: Missing pass rule on k3snet left the interface entirely inbound-blocked
 
 **Date:** 2026-08-29 · **Status:** Accepted

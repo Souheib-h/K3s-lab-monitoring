@@ -1,4 +1,4 @@
-# 10: NOC: Prometheus scraping the K3s cluster
+# Phase 5: Prometheus scraping the K3s cluster
 
 Prometheus (10.20.0.12, monitoring-net) collects Kubernetes metrics from the
 K3s cluster (k3s-net) across OPNsense. Unlike the usual in-cluster setups,
@@ -159,7 +159,9 @@ dashboard's "Total" cluster capacity panels reflect pod requests/limits, not
 node allocatable capacity, a distinction the custom Cluster dashboard (P1
 tier) makes explicit.
 
-## 6. Files under version control
+## 7. Files to version (not yet committed)
+
+> These manifests are not in the repo yet; `configs/k8s/` does not exist.
 
 ```
 configs/k8s/

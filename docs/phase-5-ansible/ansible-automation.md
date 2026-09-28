@@ -1,4 +1,4 @@
-# 09: Ansible Automation (Phase 5)
+# Phase 5: Ansible Automation
 
 Automated deployment of monitoring agents (Zabbix + Wazuh) across the whole lab,
 and registration of all hosts in the Zabbix server through its API.
@@ -81,7 +81,7 @@ Alpine (`apk`). Configuration sets `Server`, `ServerActive` and
 in the server. Service name differs by init system: `zabbix-agent` (systemd) vs
 `zabbix-agentd` (OpenRC); resolved once in a play-level var.
 
-**Wazuh agent**: on Ubuntu, version is pinned to `4.14.*` and held via
+**Wazuh agent**: on Ubuntu, version is pinned to `4.14.6-1` (exact manager version) and held via
 `dpkg_selections` to keep agents in lockstep with the manager (ADR-010). The
 `WAZUH_MANAGER` environment variable is consumed by the package postinst. On
 Alpine the apk package (4.8.2, latest available, ADR-010 amendment) supports

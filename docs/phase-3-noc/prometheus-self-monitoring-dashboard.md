@@ -1,4 +1,4 @@
-# Phase 7: Prometheus Self-Monitoring Dashboard
+# Phase 3: Prometheus Self-Monitoring Dashboard
 
 ## Objective
 

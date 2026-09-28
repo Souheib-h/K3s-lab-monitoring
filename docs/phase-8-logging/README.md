@@ -1,4 +1,4 @@
-# Phase 7 — Log Aggregation (Loki + Alloy)
+# Phase 8 — Log Aggregation (Loki + Alloy)
 
 Adding a logging pillar alongside the existing metrics (Prometheus) and security (Wazuh) stacks. Loki collects and stores logs; Alloy is the agent that ships them from each host.
 
@@ -235,9 +235,11 @@ sudo rc-service networking restart
 
 ## What's not done yet
 
-- Alloy deployment to the other 12 lab hosts via Ansible (this VM was the pilot).
+- ~~Alloy deployment to the other 12 lab hosts via Ansible (this VM was the pilot).~~ Done, see section 8.
 - A basic Grafana logs dashboard.
-- Syslog hostname still shows the pre-rename `Alpine-base` in log lines — cosmetic, same class of fix as the bastion's syslog restart.## 8. Rollout to the rest of the lab (Ansible)
+- Syslog hostname still shows the pre-rename `Alpine-base` in log lines — cosmetic, same class of fix as the bastion's syslog restart.
+
+## 8. Rollout to the rest of the lab (Ansible)
 
 The pilot above proved the setup manually on `Loki-srv`. Rolling it out to the other 12 hosts uses the same pattern as `install-agents.yml` (Phase 5): one playbook, OS-conditional blocks for Alpine vs Ubuntu.
 

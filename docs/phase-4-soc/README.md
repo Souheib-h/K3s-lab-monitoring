@@ -1,4 +1,4 @@
-# 08: SOC Configuration (Wazuh)
+# Phase 4: SOC Configuration (Wazuh)
 
 This document is the reference procedure for configuring the SOC layer of the lab, from a fresh Wazuh install (see [03-wazuh.md](../phase-2-install/wazuh.md)) to a fully working SOC. It only describes the clean path. Every issue encountered while building this procedure is documented separately in [troubleshooting/wazuh-soc-troubleshooting.md](../troubleshooting/wazuh-soc-troubleshooting.md), referenced inline as `[TS-x]`.
 
@@ -230,7 +230,7 @@ sudo systemctl restart wazuh-manager
 
 ## 5. File Integrity Monitoring (FIM)
 
-FIM ships enabled on standard system paths with a 12-hour periodic scan. It is extended with **realtime** detection on the monitoring stack's own configuration and on a sandbox directory used by the VirusTotal integration (section 6.1).
+FIM ships enabled on standard system paths with a 12-hour periodic scan. It is extended with **realtime** detection on the monitoring stack's own configuration and on a sandbox directory used by the VirusTotal integration (section 5.1).
 
 In the `<syscheck>` block, after the default `<directories>` entries:
 
