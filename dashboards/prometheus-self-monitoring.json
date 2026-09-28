@@ -132,7 +132,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "time() - process_start_time_seconds{job=\"prometheus\"}",
+          "expr": "time() - process_start_time_seconds{job=\"$job\", instance=~\"$instance\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -203,7 +203,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "process_open_fds{job=\"prometheus\"}",
+          "expr": "process_open_fds{job=\"$job\", instance=~\"$instance\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -314,7 +314,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(process_cpu_seconds_total{job=\"prometheus\"}[5m]) * 100",
+          "expr": "rate(process_cpu_seconds_total{job=\"$job\", instance=~\"$instance\"}[5m]) * 100",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -425,7 +425,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "go_goroutines{job=\"prometheus\"}",
+          "expr": "go_goroutines{job=\"$job\", instance=~\"$instance\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -528,7 +528,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "go_memstats_heap_inuse_bytes{job=\"prometheus\"}",
+          "expr": "go_memstats_heap_inuse_bytes{job=\"$job\", instance=~\"$instance\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -639,7 +639,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "process_resident_memory_bytes{job=\"prometheus\"}",
+          "expr": "process_resident_memory_bytes{job=\"$job\", instance=~\"$instance\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -742,7 +742,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(go_gc_duration_seconds_sum{job=\"prometheus\"}[5m]) / rate(go_gc_duration_seconds_count{job=\"prometheus\"}[5m])",
+          "expr": "rate(go_gc_duration_seconds_sum{job=\"$job\", instance=~\"$instance\"}[5m]) / rate(go_gc_duration_seconds_count{job=\"$job\", instance=~\"$instance\"}[5m])",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -822,7 +822,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "prometheus_tsdb_head_series{job=\"prometheus\"}",
+          "expr": "prometheus_tsdb_head_series{job=\"$job\", instance=~\"$instance\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -929,7 +929,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "increase(prometheus_tsdb_compactions_total{job=\"prometheus\"}[10m])",
+          "expr": "increase(prometheus_tsdb_compactions_total{job=\"$job\", instance=~\"$instance\"}[10m])",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -996,7 +996,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "prometheus_tsdb_storage_blocks_bytes{job=\"prometheus\"}",
+          "expr": "prometheus_tsdb_storage_blocks_bytes{job=\"$job\", instance=~\"$instance\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -1103,7 +1103,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(prometheus_tsdb_head_samples_appended_total{job=\"prometheus\"}[5m])",
+          "expr": "sum by (instance) (rate(prometheus_tsdb_head_samples_appended_total{job=\"$job\", instance=~\"$instance\"}[5m]))",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -1170,7 +1170,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "increase(prometheus_tsdb_compactions_failed_total{job=\"prometheus\"}[1h])",
+          "expr": "increase(prometheus_tsdb_compactions_failed_total{job=\"$job\", instance=~\"$instance\"}[1h])",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -1237,7 +1237,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "prometheus_tsdb_wal_corruptions_total{job=\"prometheus\"} or vector(0)",
+          "expr": "sum by (instance) (prometheus_tsdb_wal_corruptions_total{job=\"$job\", instance=~\"$instance\"})",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -1332,7 +1332,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "up{job=\"prometheus\"}",
+          "expr": "up{job=\"$job\", instance=~\"$instance\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -1434,7 +1434,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "scrape_duration_seconds{job=\"prometheus\"}",
+          "expr": "scrape_duration_seconds{job=\"$job\", instance=~\"$instance\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -1517,7 +1517,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "prometheus_config_last_reload_successful{job=\"prometheus\"}",
+          "expr": "prometheus_config_last_reload_successful{job=\"$job\", instance=~\"$instance\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -1620,7 +1620,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "prometheus_engine_query_duration_seconds{job=\"prometheus\", quantile=\"0.99\", slice=\"inner_eval\"}",
+          "expr": "prometheus_engine_query_duration_seconds{job=\"$job\", instance=~\"$instance\", quantile=\"0.99\", slice=\"inner_eval\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -1688,7 +1688,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "increase(prometheus_rule_evaluation_failures_total{job=\"prometheus\"}[1h])",
+          "expr": "increase(prometheus_rule_evaluation_failures_total{job=\"$job\", instance=~\"$instance\"}[1h])",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -1720,6 +1720,55 @@
         "refresh": 1,
         "regex": "",
         "type": "datasource"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "label_values(prometheus_build_info, job)",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Job",
+        "multi": false,
+        "name": "job",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(prometheus_build_info, job)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "label_values(prometheus_build_info{job=\"$job\"}, instance)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Instance",
+        "multi": true,
+        "name": "instance",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(prometheus_build_info{job=\"$job\"}, instance)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query",
+        "allValue": ".+"
       }
     ]
   },

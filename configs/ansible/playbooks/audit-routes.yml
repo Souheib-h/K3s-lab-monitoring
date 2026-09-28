@@ -4,10 +4,10 @@
   gather_facts: false
   tasks:
     - name: Récupérer la table de routage
-      shell: ip route
+      ansible.builtin.command: ip route
       register: routes
       changed_when: false
 
     - name: Afficher les routes
-      debug:
+      ansible.builtin.debug:
         msg: "{{ routes.stdout_lines }}"

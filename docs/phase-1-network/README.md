@@ -150,6 +150,10 @@ Disk     : 8 GB
 
 ![Outbound NAT disabled](img/outbound-nat-disable.png)
 
+> **Superseded:** "Disable" also killed internet egress for every lab VM. The mode is now **Hybrid**, see the [ADR-002 update](../../DECISIONS.md#update--outbound-nat-disable-is-too-broad-hybrid-is-correct).
+
+**Firewall → Rules → [each interface]**: every interface needs an explicit pass rule for its own subnet. An interface with no rules blocks all inbound traffic; k3snet went months without one (see [ADR-016](../../DECISIONS.md#adr-016-missing-pass-rule-on-k3snet-left-the-interface-entirely-inbound-blocked)).
+
 ### Libvirt masquerade fix
 
 Libvirt uses nftables/iptables to masquerade all outgoing traffic. RETURN rules are added to the `LIBVIRT_PRT` chain to exempt inter-network traffic:

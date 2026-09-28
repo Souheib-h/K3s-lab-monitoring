@@ -21,9 +21,9 @@ Documentées ici pour éviter de les re-parcourir en cas de symptôme similaire 
 
 ## Cause racine identifiée
 
-**Absence de route statique de retour vers `mgmt-net` (10.30.0.0/24) sur la quasi-totalité des VMs du parc.**
+**Absence de route statique de retour vers `bastion-net` (10.30.0.0/24) sur la quasi-totalité des VMs du parc.**
 
-Audit réalisé via un playbook Ansible ad-hoc (`ip route` sur toutes les VMs de l'inventory) : la majorité des hôtes (k3s-srv-2/3, k3s-agent-1/2/3, k3s-db, zabbix-srv, wazuh-srv, prometheus-srv, grafana-srv) n'avaient **aucune route par défaut ni route explicite vers `10.30.0.0/24`**. Ces VMs reçoivent leurs routes principalement via DHCP (`proto dhcp`), qui ne couvrait pas mgmt-net.
+Audit réalisé via un playbook Ansible ad-hoc (`ip route` sur toutes les VMs de l'inventory) : la majorité des hôtes (k3s-srv-2/3, k3s-agent-1/2/3, k3s-db, zabbix-srv, wazuh-srv, prometheus-srv, grafana-srv) n'avaient **aucune route par défaut ni route explicite vers `10.30.0.0/24`**. Ces VMs reçoivent leurs routes principalement via DHCP (`proto dhcp`), qui ne couvrait pas bastion-net.
 
 Conséquence : le paquet aller (bastion → VM cible) passait bien le firewall OPNsense et atteignait la VM. Mais la VM, ne sachant pas comment router sa réponse vers `10.30.0.0/24`, droppait le paquet retour localement. D'où le symptôme de timeout muet malgré un firewall qui laissait tout passer.
 
@@ -37,7 +37,7 @@ Seules `k3s-srv-1`, `load-srv` et `ansible-srv` avaient une route par défaut g�
 
 ## Fix appliqué
 
-Déploiement d'un fichier netplan canonique (`/etc/netplan/99-routes.yaml`) sur les 13 VMs du parc, ajoutant explicitement les routes croisées entre tous les réseaux du lab (k3s-net, monitoring-net, mgmt-net, k8s-ha-net), via Ansible :
+Déploiement d'un fichier netplan canonique (`/etc/netplan/99-routes.yaml`) sur les 13 VMs du parc, ajoutant explicitement les routes croisées entre tous les réseaux du lab (k3s-net, monitoring-net, bastion-net, k8s-ha-net), via Ansible :
 
 ```yaml
 network:

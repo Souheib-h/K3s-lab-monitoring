@@ -3,43 +3,54 @@
 # Download happens ONCE on the control node, then the binary is pushed over the
 # local network (GitHub x13 at ~1-2 MB/s would take hours).
 #
+# ansible-srv is excluded: its /tmp is too small to gather facts reliably and
+# the control node does not need its own logs shipped (see phase-8 doc).
+#
+# Variables (alloy_version, loki_push_url): inventory/group_vars/all/main.yml
 # Run: ansible-playbook -i inventory/hosts.yml playbooks/install-alloy.yml
 
+- name: Stage the Alloy binary on the control node
+  hosts: localhost
+  gather_facts: false
+  vars:
+    alloy_zip_url: "https://github.com/grafana/alloy/releases/download/{{ alloy_version }}/alloy-linux-amd64.zip"
+    # Under $HOME, not /tmp (tmpfs too small, see phase-8 pitfalls); one dir per version
+    alloy_staging: "{{ lookup('ansible.builtin.env', 'HOME') }}/alloy-staging/{{ alloy_version }}"
+
+  tasks:
+    - name: Create staging dir
+      ansible.builtin.file:
+        path: "{{ alloy_staging }}"
+        state: directory
+        mode: "0755"
+
+    - name: Download Alloy release zip
+      ansible.builtin.get_url:
+        url: "{{ alloy_zip_url }}"
+        dest: "{{ alloy_staging }}/alloy.zip"
+        mode: "0644"
+
+    - name: Extract binary
+      ansible.builtin.unarchive:
+        src: "{{ alloy_staging }}/alloy.zip"
+        dest: "{{ alloy_staging }}"
+        remote_src: true
+        creates: "{{ alloy_staging }}/alloy-linux-amd64"
+
+    # A truncated extract would otherwise be pushed to every host
+    - name: Smoke-test the extracted binary
+      ansible.builtin.command: "{{ alloy_staging }}/alloy-linux-amd64 --version"
+      changed_when: false
+
 - name: Deploy Grafana Alloy agents
-  hosts: all
+  hosts: all:!ansible_control
   become: true
   vars:
-    alloy_version: "v1.18.0"
-    alloy_zip_url: "https://github.com/grafana/alloy/releases/download/{{ alloy_version }}/alloy-linux-amd64.zip"
-    alloy_staging: "/home/alpine-admin/alloy-staging"          # on the control node
-    loki_push_url: "http://10.20.0.14:3100/loki/api/v1/push"
+    alloy_staging: "{{ lookup('ansible.builtin.env', 'HOME') }}/alloy-staging/{{ alloy_version }}"
     syslog_path: "{{ '/var/log/messages' if ansible_os_family == 'Alpine' else '/var/log/syslog' }}"
 
   tasks:
-    # ── 1. Download once on the control node ─────────────────────────────
-    - name: Download and extract Alloy on the control node (once)
-      run_once: true
-      delegate_to: localhost
-      become: false
-      block:
-        - name: Create staging dir
-          ansible.builtin.file:
-            path: "{{ alloy_staging }}"
-            state: directory
-            mode: "0755"
-        - name: Download Alloy release zip
-          ansible.builtin.get_url:
-            url: "{{ alloy_zip_url }}"
-            dest: "{{ alloy_staging }}/alloy.zip"
-            mode: "0644"
-        - name: Extract binary
-          ansible.builtin.unarchive:
-            src: "{{ alloy_staging }}/alloy.zip"
-            dest: "{{ alloy_staging }}"
-            remote_src: true
-            creates: "{{ alloy_staging }}/alloy-linux-amd64"
-
-    # ── 2. Push the binary to every host ─────────────────────────────────
+    # ── 1. Push the binary to every host ─────────────────────────────────
     - name: Copy Alloy binary
       ansible.builtin.copy:
         src: "{{ alloy_staging }}/alloy-linux-amd64"
@@ -47,7 +58,7 @@
         mode: "0755"
       notify: Restart alloy
 
-    # ── 3. Alpine only — glibc compat for the upstream binary ────────────
+    # ── 2. Alpine only — glibc compat for the upstream binary ────────────
     - name: Install gcompat (Alpine — upstream binary links against glibc)
       community.general.apk:
         name: gcompat
@@ -55,7 +66,7 @@
         update_cache: true
       when: ansible_os_family == "Alpine"
 
-    # ── 4. Directories ───────────────────────────────────────────────────
+    # ── 3. Directories ───────────────────────────────────────────────────
     - name: Create Alloy directories
       ansible.builtin.file:
         path: "{{ item }}"
@@ -66,21 +77,21 @@
         - /var/lib/alloy
         - /var/log/alloy
 
-    # ── 5. Config (templated per host) ───────────────────────────────────
+    # ── 4. Config (templated per host) ───────────────────────────────────
     - name: Deploy Alloy config
       ansible.builtin.template:
-        src: ../templates/config.alloy.j2
+        src: config.alloy.j2
         dest: /etc/alloy/config.alloy
         mode: "0644"
       notify: Restart alloy
 
-    # ── 6. Service — OpenRC on Alpine, systemd on Ubuntu ─────────────────
+    # ── 5. Service — OpenRC on Alpine, systemd on Ubuntu ─────────────────
     - name: Install service (Alpine — OpenRC)
       when: ansible_os_family == "Alpine"
       block:
         - name: Deploy OpenRC init script
           ansible.builtin.copy:
-            src: ../files/alloy.initd
+            src: alloy.initd
             dest: /etc/init.d/alloy
             mode: "0755"
         - name: Enable and start alloy
@@ -94,7 +105,7 @@
       block:
         - name: Deploy systemd unit
           ansible.builtin.copy:
-            src: ../files/alloy.service
+            src: alloy.service
             dest: /etc/systemd/system/alloy.service
             mode: "0644"
         - name: Enable and start alloy

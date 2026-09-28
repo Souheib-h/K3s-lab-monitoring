@@ -1,6 +1,6 @@
-# 08: SOC Configuration (Wazuh)
+# Phase 4: SOC Configuration (Wazuh)
 
-This document is the reference procedure for configuring the SOC layer of the lab, from a fresh Wazuh install (see [03-wazuh.md](../phase-2-install/wazuh.md)) to a fully working SOC. It only describes the clean path. Every issue encountered while building this procedure is documented separately in [troubleshooting/wazuh-soc-troubleshooting.md](../troubleshooting/wazuh-soc-troubleshooting.md), referenced inline as `[TS-x]`.
+This document is the reference procedure for configuring the SOC layer of the lab, from a fresh Wazuh install (see [Phase 2: Wazuh installation](../phase-2-install/wazuh.md)) to a fully working SOC. It only describes the clean path. Every issue encountered while building this procedure is documented separately in [troubleshooting/wazuh-soc-troubleshooting.md](../troubleshooting/wazuh-soc-troubleshooting.md), referenced inline as `[TS-x]`.
 
 Environment: Wazuh 4.14.6 all-in-one on Ubuntu 26.04 LTS (`10.20.0.11`). The installation assistant flags Ubuntu 26.04 as outside its recommended systems list; the deployment works and this is an accepted risk.
 
@@ -230,7 +230,7 @@ sudo systemctl restart wazuh-manager
 
 ## 5. File Integrity Monitoring (FIM)
 
-FIM ships enabled on standard system paths with a 12-hour periodic scan. It is extended with **realtime** detection on the monitoring stack's own configuration and on a sandbox directory used by the VirusTotal integration (section 6.1).
+FIM ships enabled on standard system paths with a 12-hour periodic scan. It is extended with **realtime** detection on the monitoring stack's own configuration and on a sandbox directory used by the VirusTotal integration (section 5.1).
 
 In the `<syscheck>` block, after the default `<directories>` entries:
 
@@ -325,6 +325,6 @@ Active out of the box, no configuration required:
 
 ## References
 
-- Installation walkthrough: [03-wazuh.md](../phase-2-install/wazuh.md)
+- Installation walkthrough: [Phase 2: Wazuh installation](../phase-2-install/wazuh.md)
 - Architecture decisions: ADR-003, ADR-006 in [DECISIONS.md](../../DECISIONS.md)
 - Issues encountered while building this procedure: [troubleshooting/wazuh-soc-troubleshooting.md](../troubleshooting/wazuh-soc-troubleshooting.md)

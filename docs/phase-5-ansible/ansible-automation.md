@@ -1,4 +1,4 @@
-# 09: Ansible Automation (Phase 5)
+# Phase 5: Ansible Automation
 
 Automated deployment of monitoring agents (Zabbix + Wazuh) across the whole lab,
 and registration of all hosts in the Zabbix server through its API.
@@ -50,18 +50,27 @@ Before any playbook run, every managed host needs:
 ```
 configs/ansible/
 ├── ansible.cfg                  # default inventory, key, pipelining
-├── files/
-│   └── wazuh-agentd.initd       # custom OpenRC init script (Alpine)
+├── .ansible-lint / .yamllint    # lint config (run in CI)
 ├── inventory/
 │   ├── hosts.yml                # 13 hosts, functional + logical groups
 │   └── group_vars/all/
-│       ├── main.yml             # zabbix_server_ip, wazuh_manager_ip, wazuh_version, api url
+│       ├── main.yml             # IPs, wazuh_version, alloy_version, loki_push_url
 │       ├── secrets.yml          # zabbix_api_token, GITIGNORED
 │       └── secrets.yml.example  # template with CHANGEME
 └── playbooks/
-    ├── install-agents.yml
-    └── register-zabbix-hosts.yml
+    ├── files/                   # wazuh-agentd.initd, alloy.initd (OpenRC), alloy.service (systemd)
+    ├── templates/               # config.alloy.j2
+    ├── install-agents.yml       # Zabbix + Wazuh agents
+    ├── register-zabbix-hosts.yml
+    ├── install-alloy.yml        # phase 8
+    ├── fix-routes.yml           # ADR-014
+    ├── health-check.yml         # system health across the fleet
+    ├── agents-health.yml        # agent status + Wazuh connection state
+    └── audit-*.yml, cleanup-old-ansible-key.yml
 ```
+
+Files and templates sit next to the playbooks so `src:` resolves without `../`
+paths. All playbooks pass `ansible-lint` (production profile) and `yamllint`.
 
 The inventory defines functional groups (`k3s_control_plane`, `k3s_agents`,
 `k3s_database`, `load_balancer`, `monitoring_stack`, `ansible_control`) and
@@ -81,13 +90,13 @@ Alpine (`apk`). Configuration sets `Server`, `ServerActive` and
 in the server. Service name differs by init system: `zabbix-agent` (systemd) vs
 `zabbix-agentd` (OpenRC); resolved once in a play-level var.
 
-**Wazuh agent**: on Ubuntu, version is pinned to `4.14.*` and held via
+**Wazuh agent**: on Ubuntu, version is pinned to `4.14.6-1` (exact manager version) and held via
 `dpkg_selections` to keep agents in lockstep with the manager (ADR-010). The
 `WAZUH_MANAGER` environment variable is consumed by the package postinst. On
 Alpine the apk package (4.8.2, latest available, ADR-010 amendment) supports
 neither the env variable nor ships an init script: the manager IP is patched
 into `ossec.conf` and a custom OpenRC init script
-(`files/wazuh-agentd.initd`, wrapping `/var/ossec/bin/wazuh-control`) is
+(`playbooks/files/wazuh-agentd.initd`, wrapping `/var/ossec/bin/wazuh-control`) is
 deployed and enabled.
 
 The playbook is fully idempotent: a second run reports `changed=0` on all 13

@@ -39,9 +39,21 @@ Everything is documented phase by phase, including architecture decisions (ADR) 
   K3s-db         10.10.0.20
   Load-srvs      10.10.0.10
   OPNsense WAN   10.10.0.254 ────────────── OPNsense LAN  10.20.0.254
+                                    │
+                        OPNsense BASTION interface
+                                    │
+                  bastion-net (10.30.0.0/24)
+                  Bastion-srv    10.30.0.10   (see Bastion-lab)
 ```
 
-The two networks are fully isolated at L2. OPNsense handles all inter-network routing and provides firewall logs, packet capture, and traffic visibility.
+| Network | Subnet | Role |
+|---|---|---|
+| `k3s-net` | 10.10.0.0/24 | K3s cluster (K3s-lab) |
+| `monitoring-net` | 10.20.0.0/24 | NOC/SOC stack + Ansible control node |
+| `bastion-net` | 10.30.0.0/24 | SSH jump host ([Bastion-lab](https://github.com/Souheib-h/Bastion-lab)); called `mgmt-net` in early notes |
+| `k8s-ha-net` | 10.40.0.0/24 | kubeadm HA cluster (CKA lab, not in this repo); only present in the static route tables |
+
+The networks are isolated at L2. OPNsense handles all inter-network routing and provides firewall logs, packet capture, and traffic visibility.
 
 ---
 

@@ -1,4 +1,4 @@
-# 10: NOC: Prometheus scraping the K3s cluster
+# Phase 5: Prometheus scraping the K3s cluster
 
 Prometheus (10.20.0.12, monitoring-net) collects Kubernetes metrics from the
 K3s cluster (k3s-net) across OPNsense. Unlike the usual in-cluster setups,
@@ -154,12 +154,14 @@ timestamp the duplicate-target fix was applied:
 ![K3s cluster dashboard in Grafana, fed by the new pipeline](img/grafana-k3s-cluster-dashboard.png)
 
 This import serves as a data-validation baseline; the custom dashboard suite
-(see `dashboard-suite-design.md`) builds on these sources. Note: this
+(phase 6, in progress) builds on these sources. Note: this
 dashboard's "Total" cluster capacity panels reflect pod requests/limits, not
 node allocatable capacity, a distinction the custom Cluster dashboard (P1
 tier) makes explicit.
 
-## 6. Files under version control
+## 7. Files to version (not yet committed)
+
+> These manifests are not in the repo yet; `configs/k8s/` does not exist.
 
 ```
 configs/k8s/

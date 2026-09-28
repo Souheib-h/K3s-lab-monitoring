@@ -3,109 +3,144 @@
 #
 # Contrairement à health-check.yml (vue d'ensemble système), ce playbook se
 # concentre uniquement sur les 3 agents de monitoring/logging : statut,
-# uptime du service, et pour Wazuh, l'état de connexion réel au manager
+# port d'écoute Zabbix, et pour Wazuh, l'état de connexion réel au manager
 # (pas juste "le process tourne").
+#
+# service_facts couvre systemd (Ubuntu) et OpenRC (Alpine) sans parsing shell.
 #
 # Usage : ansible-playbook -i inventory/hosts.yml playbooks/agents-health.yml
 
 - name: Santé des agents Zabbix / Wazuh / Alloy
   hosts: all
   gather_facts: false
+  become: true
+  vars:
+    svc_candidates:
+      zabbix: [zabbix-agent.service, zabbix-agent2.service, zabbix-agentd]
+      wazuh: [wazuh-agent.service, wazuh-agentd]
+      wazuh_manager: [wazuh-manager.service]
+      alloy: [alloy.service, alloy]
+    is_manager: "{{ inventory_hostname == 'wazuh-srv' }}"
 
   tasks:
+    - name: Collecter l'état des services
+      ansible.builtin.service_facts:
+
+    - name: Normaliser l'état des agents (active / stopped / not-installed)
+      vars:
+        svc_list: "{{ ansible_facts.services | dict2items }}"
+      ansible.builtin.set_fact:
+        zabbix_service: "{{ svc_list | selectattr('key', 'in', svc_candidates.zabbix) | map(attribute='value.state')
+          | map('regex_replace', '^(running|started)$', 'active') | first | default('not-installed') }}"
+        wazuh_service: "{{ svc_list | selectattr('key', 'in', svc_candidates.wazuh) | map(attribute='value.state')
+          | map('regex_replace', '^(running|started)$', 'active') | first | default('not-installed') }}"
+        wazuh_manager_service: "{{ svc_list | selectattr('key', 'in', svc_candidates.wazuh_manager) | map(attribute='value.state')
+          | map('regex_replace', '^(running|started)$', 'active') | first | default('not-installed') }}"
+        alloy_service: "{{ svc_list | selectattr('key', 'in', svc_candidates.alloy) | map(attribute='value.state')
+          | map('regex_replace', '^(running|started)$', 'active') | first | default('not-installed') }}"
+
     # ── Zabbix agent ─────────────────────────────────────────────────────
-    - name: Statut du service Zabbix agent
-      shell: |
-        systemctl is-active zabbix-agent 2>/dev/null || \
-        rc-service zabbix-agentd status 2>/dev/null | grep -oE 'started|stopped|crashed' || \
-        echo "not-installed"
-      register: zabbix_service
-      changed_when: false
+    # Port passif 10050 (le serveur interroge l'agent). Lecture directe de
+    # /proc/net/tcp{,6} : ni ss ni netstat ne sont garantis sur Alpine.
+    # 2742 = 10050 en hexadécimal, 0A = état LISTEN.
+    - name: Lire les sockets TCP en écoute
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop: [/proc/net/tcp, /proc/net/tcp6]
+      register: proc_tcp
+      failed_when: false
+      when: zabbix_service == 'active'
 
-    - name: Depuis quand le service Zabbix tourne
-      shell: |
-        systemctl show zabbix-agent --property=ActiveEnterTimestamp --value 2>/dev/null || \
-        echo "n/a (Alpine)"
-      register: zabbix_since
-      changed_when: false
-      when: zabbix_service.stdout is search('active|started')
-
-    - name: Vérifier que le port actif Zabbix répond localement
-      shell: ss -tlnp 2>/dev/null | grep -q ':10050' && echo "listening" || echo "not-listening"
-      register: zabbix_port
-      changed_when: false
-      when: zabbix_service.stdout is search('active|started')
+    - name: Déterminer si le port passif Zabbix (10050) écoute
+      ansible.builtin.set_fact:
+        zabbix_port: >-
+          {{ 'listening'
+             if (proc_tcp.results | selectattr('content', 'defined') | map(attribute='content') | map('b64decode') | join('\n'))
+                is search(':2742 [0-9A-F:]+ 0A ')
+             else 'not-listening' }}
+      when: zabbix_service == 'active'
 
     # ── Wazuh agent ──────────────────────────────────────────────────────
-    - name: Statut du service Wazuh agent
-      shell: |
-        systemctl is-active wazuh-agent 2>/dev/null || \
-        rc-service wazuh-agentd status 2>/dev/null | grep -oE 'started|stopped|crashed' || \
-        echo "not-installed"
-      register: wazuh_service
-      changed_when: false
-      when: inventory_hostname != 'wazuh-srv'
-
-    - name: Statut du manager Wazuh (sur wazuh-srv uniquement)
-      command: systemctl is-active wazuh-manager
-      register: wazuh_manager_service
-      changed_when: false
+    - name: Lire l'état de connexion de l'agent Wazuh
+      ansible.builtin.slurp:
+        src: /var/ossec/var/run/wazuh-agentd.state
+      register: wazuh_state_raw
       failed_when: false
-      when: inventory_hostname == 'wazuh-srv'
+      when: not is_manager and wazuh_service == 'active'
 
-    - name: État de connexion réel de l'agent Wazuh au manager
-      shell: |
-        grep -oE "'connected'|'disconnected'|'pending'" /var/ossec/var/run/wazuh-agentd.state 2>/dev/null | head -1 || echo "n/a"
-      register: wazuh_connection
-      changed_when: false
-      when: inventory_hostname != 'wazuh-srv' and wazuh_service.stdout is search('active|started')
+    - name: Extraire le statut de connexion au manager
+      ansible.builtin.set_fact:
+        wazuh_connection: >-
+          {{ (wazuh_state_raw.content | b64decode | regex_search("status='(\w+)'", '\1') | default(['n/a'], true) | first)
+             if wazuh_state_raw.content is defined else 'n/a' }}
+      when: not is_manager and wazuh_service == 'active'
 
     # ── Alloy (logging) ──────────────────────────────────────────────────
-    - name: Statut du service Alloy
-      shell: |
-        systemctl is-active alloy 2>/dev/null || \
-        rc-service alloy status 2>/dev/null | grep -oE 'started|stopped|crashed' || \
-        echo "not-installed"
-      register: alloy_service
+    - name: Erreurs Alloy récentes (systemd)
+      ansible.builtin.command: journalctl -u alloy --since "5 min ago" --no-pager -q
+      register: alloy_journal
       changed_when: false
+      failed_when: false
+      when: alloy_service == 'active' and 'alloy.service' in ansible_facts.services
 
-    - name: Vérifier qu'Alloy pousse bien vers Loki (dernières lignes de log)
-      shell: |
-        (journalctl -u alloy --since "5 min ago" 2>/dev/null | grep -iE "error|failed" | tail -3) || \
-        (tail -n 50 /var/log/alloy/alloy-error.log 2>/dev/null | grep -iE "error|failed" | tail -3) || \
-        echo "aucune erreur recente / logs indisponibles"
-      register: alloy_errors
+    - name: Erreurs Alloy récentes (OpenRC)
+      ansible.builtin.command: tail -n 50 /var/log/alloy/alloy-error.log
+      register: alloy_logfile
       changed_when: false
-      when: alloy_service.stdout is search('active|started')
+      failed_when: false
+      when: alloy_service == 'active' and 'alloy.service' not in ansible_facts.services
+
+    - name: Filtrer les erreurs Alloy
+      vars:
+        alloy_lines: "{{ (alloy_journal.stdout_lines | default([])) + (alloy_logfile.stdout_lines | default([])) }}"
+      ansible.builtin.set_fact:
+        alloy_errors: "{{ (alloy_lines | select('search', '(?i)error|failed') | list)[-3:] }}"
 
     # ── Rapport ──────────────────────────────────────────────────────────
     - name: Rapport agents pour cet hôte
-      debug:
+      vars:
+        zabbix_line: "Zabbix agent : {{ zabbix_service }}{{ ' (port 10050: ' ~ zabbix_port ~ ')' if zabbix_port is defined else '' }}"
+        wazuh_line: >-
+          {{ 'Wazuh manager : ' ~ wazuh_manager_service if is_manager
+             else 'Wazuh agent : ' ~ wazuh_service ~ (' (connexion: ' ~ wazuh_connection ~ ')' if wazuh_connection is defined else '') }}
+        alloy_line: "Alloy : {{ alloy_service }}{{ ' — erreurs récentes: ' ~ alloy_errors | join(' | ') if alloy_errors else '' }}"
+      ansible.builtin.debug:
         msg:
           - "=== {{ inventory_hostname }} ==="
-          - "Zabbix agent : {{ zabbix_service.stdout }}{{ ' (port 10050: ' + zabbix_port.stdout + ')' if zabbix_port is defined and zabbix_port.stdout is defined else '' }}"
-          - "{{ 'Wazuh manager : ' + wazuh_manager_service.stdout if inventory_hostname == 'wazuh-srv' else 'Wazuh agent : ' + wazuh_service.stdout + (' (connexion: ' + wazuh_connection.stdout + ')' if wazuh_connection is defined and wazuh_connection.stdout is defined else '') }}"
-          - "Alloy : {{ alloy_service.stdout }}{{ ' — erreurs récentes: ' + alloy_errors.stdout if alloy_errors is defined and alloy_errors.stdout is defined and alloy_errors.stdout != 'aucune erreur recente / logs indisponibles' else '' }}"
+          - "{{ zabbix_line }}"
+          - "{{ wazuh_line }}"
+          - "{{ alloy_line }}"
 
 - name: Synthèse globale — agents en échec
   hosts: all
   gather_facts: false
   tasks:
     - name: Alerter si Zabbix agent inactif
-      debug:
-        msg: "🔴 {{ inventory_hostname }} : Zabbix agent {{ hostvars[inventory_hostname].zabbix_service.stdout }}"
-      when: hostvars[inventory_hostname].zabbix_service.stdout not in ['active', 'started']
+      ansible.builtin.debug:
+        msg: "🔴 {{ inventory_hostname }} : Zabbix agent {{ zabbix_service }}"
+      when:
+        - zabbix_service is defined
+        - zabbix_service != 'active'
 
     - name: Alerter si Wazuh agent inactif (hors manager)
-      debug:
-        msg: "🔴 {{ inventory_hostname }} : Wazuh agent {{ hostvars[inventory_hostname].wazuh_service.stdout }}"
+      ansible.builtin.debug:
+        msg: "🔴 {{ inventory_hostname }} : Wazuh agent {{ wazuh_service }}"
       when:
         - inventory_hostname != 'wazuh-srv'
-        - hostvars[inventory_hostname].wazuh_service.stdout not in ['active', 'started', 'not-installed']
+        - wazuh_service is defined
+        - wazuh_service not in ['active', 'not-installed']
+
+    - name: Alerter si agent Wazuh non connecté au manager
+      ansible.builtin.debug:
+        msg: "🟠 {{ inventory_hostname }} : Wazuh agent actif mais {{ wazuh_connection }}"
+      when:
+        - wazuh_connection is defined
+        - wazuh_connection != 'connected'
 
     - name: Alerter si Wazuh manager inactif
-      debug:
-        msg: "🔴 {{ inventory_hostname }} : Wazuh MANAGER {{ hostvars[inventory_hostname].wazuh_manager_service.stdout }}"
+      ansible.builtin.debug:
+        msg: "🔴 {{ inventory_hostname }} : Wazuh MANAGER {{ wazuh_manager_service }}"
       when:
         - inventory_hostname == 'wazuh-srv'
-        - hostvars[inventory_hostname].wazuh_manager_service.stdout != 'active'
+        - wazuh_manager_service is defined
+        - wazuh_manager_service != 'active'
