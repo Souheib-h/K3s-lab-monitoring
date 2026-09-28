@@ -263,8 +263,22 @@ ssh zabbix-admin@10.20.0.10 "ping -c 2 10.10.0.11"
 | VM | MAC (monitoring-net) | IP |
 |---|---|---|
 | Zabbix-srv | 52:54:00:11:26:13 | 10.20.0.10 |
-| Wazuh-srv | 52:54:00:88:f8:5f | 10.20.0.11 |
+| Wazuh-srv | 52:54:00:6d:e4:69 | 10.20.0.11 |
 | Prometheus-srv | 52:54:00:67:6c:b3 | 10.20.0.12 |
 | Grafana-srv | 52:54:00:b0:64:bb | 10.20.0.13 |
 | OPNsense WAN | 52:54:00:09:02:ed | 10.10.0.254 |
-| OPNsense LAN | 52:54:00:a7:c0:fc | 10.20.0.254 |
+| OPNsense LAN | 52:54:00:a7:c0:fc | 10.20.0.254 (DHCP reservation, so the pool never hands it out) |
+| ansible-srv | 52:54:00:33:ce:89 | 10.20.0.125 |
+
+> Wazuh-srv was recreated (new MAC); the reservation above is the current one.
+
+### DHCP routes (option 121)
+
+Both libvirt networks push classless static routes through dnsmasq. Declare **one** `dhcp-option=121` line per network: dnsmasq keeps only the last declaration, and a client that receives option 121 ignores the default gateway option (RFC 3442), so the default route must be inside option 121 when one is needed. See the ADR-017 root cause section.
+
+```xml
+<!-- k3s-net -->
+<dnsmasq:option value='dhcp-option=121,0.0.0.0/0,10.10.0.254,10.20.0.0/24,10.10.0.254,10.30.0.0/24,10.10.0.254,10.40.0.0/24,10.10.0.254'/>
+<!-- monitoring-net -->
+<dnsmasq:option value='dhcp-option=121,10.10.0.0/24,10.20.0.254,10.30.0.0/24,10.20.0.254,10.40.0.0/24,10.20.0.254'/>
+```

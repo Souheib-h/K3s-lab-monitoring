@@ -623,3 +623,34 @@ The default route via OPNsense is part of the canonical `99-routes.yaml` written
 
 - `load-srv` (Alpine) keeps its own route in `/etc/network/interfaces` (`up ip route add default via 10.10.0.254`). It also receives `default via 10.10.0.1 metric 202` from DHCP: if OPNsense is down, load-srv falls back to direct NAT through the hypervisor, unfiltered. Accepted for a lab.
 - If OPNsense is down, the other k3s nodes lose Internet access (image pulls, apt, NTP); in-cluster traffic is unaffected.
+
+### Root cause (2026-09-28): DHCP option 121 without a default route
+
+The missing default route was not a quirk of K3s or netplan. libvirt's dnsmasq on k3s-net sends classless static routes (DHCP option 121) through `<dnsmasq:options>` in the network XML, declared as **three separate lines**:
+
+```xml
+<dnsmasq:option value='dhcp-option=121,10.20.0.0/24,10.10.0.254'/>
+<dnsmasq:option value='dhcp-option=121,10.30.0.0/24,10.10.0.254'/>
+<dnsmasq:option value='dhcp-option=121,10.40.0.0/24,10.10.0.254'/>
+```
+
+Two problems stacked:
+
+1. **dnsmasq keeps only the last declaration of an option.** Only `10.40.0.0/24` was ever sent: on `k3s-srv-1`, it is the only remote network marked `proto dhcp` in `ip route`; `10.20` and `10.30` came from netplan alone.
+2. **RFC 3442: a client that receives option 121 must ignore the Router option (3).** Since option 121 carried no default route, DHCP clients ended up with no default route at all, and K3s would not start. `fix-default-route.yml` worked around the symptom.
+
+**Fix:** one option 121 line per network, default route first on k3s-net (same content as `99-routes.yaml`, so DHCP and netplan agree and a new VM on k3s-net gets working routes):
+
+```xml
+<!-- k3s-net -->
+<dnsmasq:option value='dhcp-option=121,0.0.0.0/0,10.10.0.254,10.20.0.0/24,10.10.0.254,10.30.0.0/24,10.10.0.254,10.40.0.0/24,10.10.0.254'/>
+<!-- monitoring-net: same merge, no default route added (unchanged behaviour) -->
+<dnsmasq:option value='dhcp-option=121,10.10.0.0/24,10.20.0.254,10.30.0.0/24,10.20.0.254,10.40.0.0/24,10.20.0.254'/>
+```
+
+Applied with `virsh net-dumpxml --inactive` → `sed` → `virsh net-define` (persistent config only: `dnsmasq:options` cannot be changed live, and `net-destroy`/`net-start` would cut every VM on the bridge). Takes effect at the next start of the libvirt network. Backups: `~/k3s-net.backup.xml`, `~/monitoring-net.backup.xml` on My-ship; rollback with `virsh net-define <backup>`.
+
+**Also on 2026-09-28:** a DHCP reservation `OPNsense-LAN 52:54:00:a7:c0:fc → 10.20.0.254` was added to monitoring-net. The pool (`.100-.254`) included OPNsense's static LAN address with no reservation, so a VM booting while OPNsense was down could have taken the gateway's IP. k3s-net already had the equivalent reservation for `.254`.
+
+**Pending check** after the next hypervisor restart, on a k3s node: `ip route | grep dhcp` should show `default via 10.10.0.254` and routes to `10.20`, `10.30`, `10.40`.
+
