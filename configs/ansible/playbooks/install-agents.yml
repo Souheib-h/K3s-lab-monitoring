@@ -7,6 +7,7 @@
   become: true
   vars:
     zabbix_service: "{{ 'zabbix-agentd' if ansible_os_family == 'Alpine' else 'zabbix-agent' }}"
+    zabbix_repo_base: https://repo.zabbix.com/zabbix/7.4/release/ubuntu/pool/main/z/zabbix-release
 
   tasks:
     - name: Install zabbix-agent (Ubuntu)
@@ -14,7 +15,7 @@
       block:
         - name: Add Zabbix official repository
           ansible.builtin.apt:
-            deb: "https://repo.zabbix.com/zabbix/7.4/release/ubuntu/pool/main/z/zabbix-release/zabbix-release_latest_7.4+ubuntu{{ ansible_distribution_version }}_all.deb"
+            deb: "{{ zabbix_repo_base }}/zabbix-release_latest_7.4+ubuntu{{ ansible_distribution_version }}_all.deb"
 
         - name: Install package
           ansible.builtin.apt:
@@ -35,9 +36,9 @@
         regexp: "^{{ item.key }}="
         line: "{{ item.key }}={{ item.value }}"
       loop:
-        - { key: Server,       value: "{{ zabbix_server_ip }}" }
+        - { key: Server, value: "{{ zabbix_server_ip }}" }
         - { key: ServerActive, value: "{{ zabbix_server_ip }}" }
-        - { key: Hostname,     value: "{{ inventory_hostname }}" }
+        - { key: Hostname, value: "{{ inventory_hostname }}" }
       notify: Restart zabbix-agent
 
     - name: Enable and start zabbix-agent
@@ -121,7 +122,7 @@
 
         - name: Deploy OpenRC init script
           ansible.builtin.copy:
-            src: ../files/wazuh-agentd.initd
+            src: wazuh-agentd.initd
             dest: /etc/init.d/wazuh-agentd
             mode: "0755"
 

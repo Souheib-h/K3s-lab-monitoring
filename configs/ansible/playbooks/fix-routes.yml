@@ -4,7 +4,7 @@
   become: true
   tasks:
     - name: Écrire la config netplan canonique (remplace l'ancienne)
-      copy:
+      ansible.builtin.copy:
         dest: /etc/netplan/99-routes.yaml
         content: |
           network:
@@ -19,18 +19,20 @@
                   - to: 10.40.0.0/24
                     via: 10.10.0.254
         mode: '0600'
-      register: netplan_file
+      notify: Appliquer netplan
 
-    - name: Appliquer netplan (reconcilie et supprime les routes obsolètes)
-      command: netplan apply
-      when: netplan_file.changed
+  handlers:
+    - name: Appliquer netplan
+      # reconcilie et supprime les routes obsolètes
+      ansible.builtin.command: netplan apply
+      changed_when: true
 
 - name: Nettoyer et reconstruire les routes statiques - côté monitoring-net
   hosts: zabbix-srv,wazuh-srv,prometheus-srv,grafana-srv
   become: true
   tasks:
     - name: Écrire la config netplan canonique (remplace l'ancienne)
-      copy:
+      ansible.builtin.copy:
         dest: /etc/netplan/99-routes.yaml
         content: |
           network:
@@ -45,8 +47,10 @@
                   - to: 10.40.0.0/24
                     via: 10.20.0.254
         mode: '0600'
-      register: netplan_file
+      notify: Appliquer netplan
 
-    - name: Appliquer netplan (reconcilie et supprime les routes obsolètes)
-      command: netplan apply
-      when: netplan_file.changed
+  handlers:
+    - name: Appliquer netplan
+      # reconcilie et supprime les routes obsolètes
+      ansible.builtin.command: netplan apply
+      changed_when: true

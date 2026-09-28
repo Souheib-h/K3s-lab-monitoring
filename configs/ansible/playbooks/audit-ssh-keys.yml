@@ -1,24 +1,29 @@
-# audit-ssh-keys.yml
 ---
+# audit-ssh-keys.yml
 - name: Audit des clés SSH autorisées sur chaque VM
   hosts: all
   gather_facts: false
   tasks:
     - name: Récupérer le contenu de authorized_keys
-      shell: cat ~/.ssh/authorized_keys 2>/dev/null || echo "AUCUN FICHIER"
+      ansible.builtin.command: cat .ssh/authorized_keys
+      args:
+        chdir: "~"
       register: auth_keys
       changed_when: false
+      failed_when: false
 
     - name: Afficher le contenu brut
-      debug:
-        msg: "{{ auth_keys.stdout_lines }}"
+      ansible.builtin.debug:
+        msg: "{{ auth_keys.stdout_lines if auth_keys.rc == 0 else 'AUCUN FICHIER' }}"
 
     - name: Extraire les fingerprints (une ligne par clé)
-      shell: |
-        ssh-keygen -lf ~/.ssh/authorized_keys 2>/dev/null || echo "ERREUR LECTURE"
+      ansible.builtin.command: ssh-keygen -lf .ssh/authorized_keys
+      args:
+        chdir: "~"
       register: fingerprints
       changed_when: false
+      failed_when: false
 
     - name: Afficher les fingerprints
-      debug:
-        msg: "{{ fingerprints.stdout_lines }}"
+      ansible.builtin.debug:
+        msg: "{{ fingerprints.stdout_lines if fingerprints.rc == 0 else 'ERREUR LECTURE' }}"
