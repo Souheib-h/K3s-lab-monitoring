@@ -64,7 +64,6 @@ OPNsense 26.1 deployed as a dedicated VM with:
 
 libvirt's nftables/iptables masquerade chain (`LIBVIRT_PRT`) rewrites source IPs before custom routing can work. Fix: switch libvirt firewall backend to `iptables`, add `RETURN` rules to exempt inter-network traffic, disable outbound NAT on OPNsense.
 
-
 ### Update  outbound NAT: Disable is too broad, Hybrid is correct
 
 **Status:** Revised (2026-07-23)
@@ -207,7 +206,9 @@ Phase 5 Ansible deploys:
 
 - Manual install on each VM: done for central servers (educational value), not appropriate for repeated per-node tasks.
 - K3s DaemonSet for node_exporter: valid K8s-native approach, deferred as a potential enhancement post-Phase 6.
-  
+
+---
+
 ## ADR-007: Prometheus self-monitoring dashboard scoped to process-level only
 
 **Status:** Accepted
@@ -235,6 +236,8 @@ Export dashboards intended for external sharing via the classic REST API (`GET /
 
 **Why:**
 Extra manual step per export, but guarantees compatibility with any Grafana instance ≥ 10.x and with Grafana.com's upload validator. Documented in `docs/troubleshooting/grafana-dashboard-schemaV2-export-failure.md`.
+
+---
 
 ## ADR-009: Ubuntu 26.04 for the Wazuh VM (forced pre-.1 upgrade)
 
@@ -304,7 +307,21 @@ Upgrades become a deliberate, tested action rather than a side effect of routine
 
 - The SOC will not receive Wazuh security/feature updates automatically; any upgrade must be planned, tested, and the repository re-enabled explicitly.
 - This freeze must be revisited before any future Wazuh 5.x migration.
-  
+
+---
+
+## ADR-010: Amendment: Alpine agents on 4.8.2
+
+**Date:** 2026-07-18 · **Status:** Accepted exception
+
+ADR-010 freezes the Wazuh repository at 4.14.6 to keep manager and agents in
+lockstep. The Wazuh apk repository for Alpine stops at **4.8.2**, no 4.14
+build exists. The two Alpine hosts (load-srv, ansible-srv) therefore run
+agent 4.8.2 against the 4.14 manager: protocol-compatible, flagged "outdated"
+in the dashboard, and **excluded from Vulnerability Detection scans**. Accepted
+as-is; revisit if Wazuh publishes newer Alpine builds.
+
+---
 
 ## ADR-011: Ansible control node on Alpine Linux
 
@@ -339,7 +356,7 @@ the OPNsense firewall VM and the Arch hypervisor.
   configuration is managed through its own UI/config.xml and documented
   separately. A `connection: local` placeholder in the inventory produced
   misleading SUCCESS results and was removed.
-- Hypervisor (My-pc): trust hierarchy. The control node holds SSH keys and
+- Hypervisor (My-ship): trust hierarchy. The control node holds SSH keys and
   passwordless sudo on the entire lab; granting it root on the machine that
   *runs* the lab would invert the containment model, a compromised control
   node must not yield the host. The hypervisor already runs both monitoring
@@ -348,19 +365,6 @@ the OPNsense firewall VM and the Arch hypervisor.
 
 **Consequences.** `ansible all` covers exactly the 13 lab hosts. Firewall and
 hypervisor changes remain manual and documented.
-
----
-
-## ADR-010: Amendment: Alpine agents on 4.8.2
-
-**Date:** 2026-07-18 · **Status:** Accepted exception
-
-ADR-010 freezes the Wazuh repository at 4.14.6 to keep manager and agents in
-lockstep. The Wazuh apk repository for Alpine stops at **4.8.2**, no 4.14
-build exists. The two Alpine hosts (load-srv, ansible-srv) therefore run
-agent 4.8.2 against the 4.14 manager: protocol-compatible, flagged "outdated"
-in the dashboard, and **excluded from Vulnerability Detection scans**. Accepted
-as-is; revisit if Wazuh publishes newer Alpine builds.
 
 ---
 
@@ -401,7 +405,7 @@ FortiGate's NAT/policy model differs from OPNsense's outbound NAT toggle. The sa
 
 ADR-013 planned to replace OPNsense with a FortiGate-VM using the permanent evaluation license, keeping IP/route parity so no downstream host would need reconfiguration. During cutover planning, the license's resource ceiling was checked against the lab's actual topology.
 
-The FortiGate-VM permanent evaluation license caps interfaces, firewall policies, and routes at three each (Fortinet official documentation, "Permanent trial mode for FortiGate-VM," *Limitations of the Evaluation VM license*). The lab's topology already requires three interfaces (WAN, `k3s-net`, `monitoring-net`) on its own, before counting any future network such as the planned `mgmt-net` for Bastion-lab. Replicating OPNsense's current ruleset needs more than three firewall policies (inter-network allow rules in both directions, plus outbound NAT per network) and correspondingly more than three routes.
+The FortiGate-VM permanent evaluation license caps interfaces, firewall policies, and routes at three each (Fortinet official documentation, "Permanent trial mode for FortiGate-VM," *Limitations of the Evaluation VM license*). The lab's topology already requires three interfaces (WAN, `k3s-net`, `monitoring-net`) on its own, before counting any additional network such as `bastion-net` for Bastion-lab. Replicating OPNsense's current ruleset needs more than three firewall policies (inter-network allow rules in both directions, plus outbound NAT per network) and correspondingly more than three routes.
 
 ### Decision
 
@@ -428,26 +432,26 @@ Halt the cutover. OPNsense remains the active router (ADR-002, and the ADR-002 o
 
 ---
 
-## ADR-014: Canonical static routes to mgmt-net across the fleet
+## ADR-014: Canonical static routes to bastion-net across the fleet
 
 **Date:** 2026-08-29 · **Status:** Accepted
 
 ### Context
 
-SSH and ICMP from the bastion (`10.30.0.10`, mgmt-net) to most of the fleet (k3s-net, monitoring-net) failed silently, timeouts with no explicit rejection. OPNsense firewall rules were correct and permissive (`pass` from `10.30.0.10` to `*`), confirmed via `Firewall → Log Files → Live View`: the outbound packet was seen and allowed on the destination interface. No state was ever created in `Firewall → Diagnostics → States` for traffic initiated from the bastion, indicating the reply never made it back.
+SSH and ICMP from the bastion (`10.30.0.10`, bastion-net) to most of the fleet (k3s-net, monitoring-net) failed silently, timeouts with no explicit rejection. OPNsense firewall rules were correct and permissive (`pass` from `10.30.0.10` to `*`), confirmed via `Firewall → Log Files → Live View`: the outbound packet was seen and allowed on the destination interface. No state was ever created in `Firewall → Diagnostics → States` for traffic initiated from the bastion, indicating the reply never made it back.
 
-An Ansible ad-hoc audit (`ip route` across all 13 hosts) showed the actual cause: most VMs receive their routing table via DHCP (`proto dhcp`), which never included a route back to `10.30.0.0/24`. Only `k3s-srv-1`, `load-srv`, and `ansible-srv` had a default route that happened to cover mgmt-net, explaining why they behaved differently from the rest of the fleet during initial triage. VMs without any route to `10.30.0.0/24` accepted the inbound packet but had no way to route the reply, dropping it locally, invisible to the firewall.
+An Ansible ad-hoc audit (`ip route` across all 13 hosts) showed the actual cause: most VMs receive their routing table via DHCP (`proto dhcp`), which never included a route back to `10.30.0.0/24`. Only `k3s-srv-1`, `load-srv`, and `ansible-srv` had a default route that happened to cover bastion-net, explaining why they behaved differently from the rest of the fleet during initial triage. VMs without any route to `10.30.0.0/24` accepted the inbound packet but had no way to route the reply, dropping it locally, invisible to the firewall.
 
 ### Decision
 
-Deploy a canonical `/etc/netplan/99-routes.yaml` via Ansible on all 13 hosts, explicitly listing static routes to every other lab network (k3s-net, monitoring-net, mgmt-net, k8s-ha-net) rather than relying on DHCP-provided routes for inter-network reachability.
+Deploy a canonical `/etc/netplan/99-routes.yaml` via Ansible on all 13 hosts, explicitly listing static routes to every other lab network (k3s-net, monitoring-net, bastion-net, and k8s-ha-net `10.40.0.0/24`) rather than relying on DHCP-provided routes for inter-network reachability.
 
 `k3s-srv-1` (the only host on static IP via `50-cloud-init.yaml`, `dhcp4: false`) required manual `netplan apply` via `virsh console` instead of through the Ansible SSH connection, which the interface renegotiation was cutting mid-play.
 
 ### Why
 
 - Firewall logs proved the aller path was never the problem, ruling out OPNsense saved significant time once actually consulted; should be the first diagnostic step for any "traffic passes the firewall but nothing comes back" symptom going forward.
-- A single canonical routes file per network side, applied via the existing Ansible pipeline (already used for the k3s-net ↔ monitoring-net route, see original `k3s-cluster-build.md`), keeps routing config in one auditable place instead of depending on whatever OPNsense's DHCP server happens to hand out.
+- A single canonical routes file per network side, applied via the existing Ansible pipeline (the k3s-net ↔ monitoring-net routes were first deployed the same way, see `docs/phase-1-network/README.md`), keeps routing config in one auditable place instead of depending on whatever OPNsense's DHCP server happens to hand out.
 - `netplan apply` reconciles the full file state, so redeploying this playbook also removes any stale/manual route previously added to the same file, incidental cleanup alongside the fix.
 
 ### Alternatives rejected
@@ -469,7 +473,7 @@ Deploy a canonical `/etc/netplan/99-routes.yaml` via Ansible on all 13 hosts, ex
 
 ### Context
 
-ADR-014 deployed a canonical static-routes file to fix missing routes back to `mgmt-net` (10.30.0.0/24) across the fleet, but the fix was written and validated only against **netplan**, which does not exist on Alpine Linux. Alpine hosts (`Ansible-srv`, and by extension `load-srv`, `Bastion-srv`) manage networking through `/etc/network/interfaces` instead, and were silently left out of ADR-014's coverage.
+ADR-014 deployed a canonical static-routes file to fix missing routes back to `bastion-net` (10.30.0.0/24) across the fleet, but the fix was written and validated only against **netplan**, which does not exist on Alpine Linux. Alpine hosts (`Ansible-srv`, and by extension `load-srv`, `Bastion-srv`) manage networking through `/etc/network/interfaces` instead, and were silently left out of ADR-014's coverage.
 
 The gap surfaced during a later session, on a fresh full-fleet reboot: `ssh ansible-srv` hung with the same symptom ADR-014 had just fixed everywhere else. `ip route` on `Ansible-srv` confirmed no route to `10.30.0.0/24`, and a ping toward the bastion returned `Destination Port Unreachable` **from `10.20.0.1`** (the libvirt NAT gateway), not from OPNsense (`10.20.0.254`) — proof the packet was falling through to the default route instead of being routed via OPNsense, exactly the ADR-014 failure mode, on a host ADR-014 never touched.
 
