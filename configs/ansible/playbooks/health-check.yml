@@ -52,7 +52,7 @@
       changed_when: false
 
     - name: Récupérer l'uptime
-      command: uptime -p
+      shell: uptime -p 2>/dev/null || uptime   # busybox (Alpine) n'a pas -p
       register: sys_uptime
       changed_when: false
 

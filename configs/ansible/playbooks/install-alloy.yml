@@ -11,7 +11,7 @@
   vars:
     alloy_version: "v1.18.0"
     alloy_zip_url: "https://github.com/grafana/alloy/releases/download/{{ alloy_version }}/alloy-linux-amd64.zip"
-    alloy_staging: "/home/alpine-admin/alloy-staging"          # on the control node
+    alloy_staging: "/home/alpine-admin/alloy-staging/{{ alloy_version }}"   # on the control node, one dir per version
     loki_push_url: "http://10.20.0.14:3100/loki/api/v1/push"
     syslog_path: "{{ '/var/log/messages' if ansible_os_family == 'Alpine' else '/var/log/syslog' }}"
 
@@ -38,6 +38,10 @@
             dest: "{{ alloy_staging }}"
             remote_src: true
             creates: "{{ alloy_staging }}/alloy-linux-amd64"
+        # A truncated extract (see phase-8 pitfalls) would otherwise be pushed to every host
+        - name: Smoke-test the extracted binary
+          ansible.builtin.command: "{{ alloy_staging }}/alloy-linux-amd64 --version"
+          changed_when: false
 
     # ── 2. Push the binary to every host ─────────────────────────────────
     - name: Copy Alloy binary

@@ -14,7 +14,7 @@
       block:
         - name: Add Zabbix official repository
           ansible.builtin.apt:
-            deb: "https://repo.zabbix.com/zabbix/7.4/release/ubuntu/pool/main/z/zabbix-release/zabbix-release_latest_7.4+ubuntu24.04_all.deb"
+            deb: "https://repo.zabbix.com/zabbix/7.4/release/ubuntu/pool/main/z/zabbix-release/zabbix-release_latest_7.4+ubuntu{{ ansible_distribution_version }}_all.deb"
 
         - name: Install package
           ansible.builtin.apt:

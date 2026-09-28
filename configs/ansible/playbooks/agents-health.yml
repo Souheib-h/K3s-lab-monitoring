@@ -55,7 +55,7 @@
 
     - name: État de connexion réel de l'agent Wazuh au manager
       shell: |
-        grep -oE "'connected'|'disconnected'|'pending'" /var/ossec/var/run/wazuh-agentd.state 2>/dev/null | head -1 || echo "n/a"
+        grep -oE "'connected'|'disconnected'|'pending'" /var/ossec/var/run/wazuh-agentd.state 2>/dev/null | head -1 | grep . || echo "n/a"
       register: wazuh_connection
       changed_when: false
       when: inventory_hostname != 'wazuh-srv' and wazuh_service.stdout is search('active|started')
