@@ -152,9 +152,19 @@ Disk     : 8 GB
 
 > **Superseded:** "Disable" also killed internet egress for every lab VM. The mode is now **Hybrid**, see the [ADR-002 update](../../DECISIONS.md#update--outbound-nat-disable-is-too-broad-hybrid-is-correct).
 
-**Firewall → Rules → [each interface]**: every interface needs an explicit pass rule for its own subnet. An interface with no rules blocks all inbound traffic; k3snet went months without one (see [ADR-016](../../DECISIONS.md#adr-016-missing-pass-rule-on-k3snet-left-the-interface-entirely-inbound-blocked)).
+**Firewall → Rules → [each interface]**: an interface with no rules blocks all inbound traffic; k3snet went months without one (see [ADR-016](../../DECISIONS.md#adr-016-missing-pass-rule-on-k3snet-left-the-interface-entirely-inbound-blocked)). Pass only the flows the network initiates, not `net → any`. Current k3snet rule set (ADR-016 amendment):
 
-### Libvirt masquerade fix
+| Rule | Destination | Port | Purpose |
+|---|---|---|---|
+| R1 | 10.20.0.11 | TCP 1514-1515 | Wazuh agents |
+| R2 | 10.20.0.10 | TCP 10051 | Zabbix active checks |
+| R3 | 10.20.0.14 | TCP 3100 | Alloy → Loki |
+| R4 | This Firewall | ICMP echo | Diagnostics |
+| R5 | ! `RFC1918` | TCP/UDP 80, 443, 123 | Internet only (ADR-017) |
+
+### Libvirt masquerade fix (historical)
+
+> **No longer applied (2026-09-28).** The hypervisor now runs libvirt's default nftables backend, without `LIBVIRT_PRT` or the `RETURN` rules below, and routing works unchanged. Kept for the record; see the ADR-002 note.
 
 Libvirt uses nftables/iptables to masquerade all outgoing traffic. RETURN rules are added to the `LIBVIRT_PRT` chain to exempt inter-network traffic:
 
