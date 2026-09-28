@@ -94,7 +94,8 @@
       vars:
         alloy_lines: "{{ (alloy_journal.stdout_lines | default([])) + (alloy_logfile.stdout_lines | default([])) }}"
       ansible.builtin.set_fact:
-        alloy_errors: "{{ (alloy_lines | select('search', '(?i)error|failed') | list)[-3:] }}"
+        # level=error|warn uniquement ; GOMEMLIMIT/cgroup est attendu sous OpenRC (pas de cgroup)
+        alloy_errors: "{{ (alloy_lines | select('search', 'level=(error|warn)') | reject('search', 'GOMEMLIMIT|memory limit') | list)[-3:] }}"
 
     # ── Rapport ──────────────────────────────────────────────────────────
     - name: Rapport agents pour cet hôte

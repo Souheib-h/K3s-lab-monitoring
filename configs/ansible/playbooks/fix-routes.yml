@@ -1,4 +1,15 @@
 ---
+# fix-routes.yml — routes canoniques de chaque réseau (ADR-014, ADR-017)
+#
+# Le fichier 99-routes.yaml est réécrit en entier : il est la seule source de
+# vérité pour les routes statiques. Côté k3s-net il porte aussi la route par
+# défaut via OPNsense (ADR-017) : K3s refuse de démarrer sans route par défaut,
+# et c'est ce qui fait passer l'accès Internet du cluster par la règle R5.
+# Remplace l'ancien fix-default-route.yml (hors repo).
+#
+# Alpine (load-srv, ansible-srv) : non couvert ici, routes dans
+# /etc/network/interfaces (ADR-015).
+
 - name: Nettoyer et reconstruire les routes statiques - côté k3s-net
   hosts: k3s-srv-1,k3s-srv-2,k3s-srv-3,k3s-agent-1,k3s-agent-2,k3s-agent-3,k3s-db
   become: true
@@ -12,6 +23,9 @@
             ethernets:
               enp1s0:
                 routes:
+                  # ADR-017 : Internet via OPNsense (filtré par la règle R5)
+                  - to: default
+                    via: 10.10.0.254
                   - to: 10.20.0.0/24
                     via: 10.10.0.254
                   - to: 10.30.0.0/24
@@ -20,6 +34,23 @@
                     via: 10.10.0.254
         mode: '0600'
       notify: Appliquer netplan
+
+    - name: Appliquer netplan maintenant (avant de vérifier K3s)
+      ansible.builtin.meta: flush_handlers
+
+    # Démarre K3s s'il était tombé faute de route par défaut ; ne redémarre
+    # jamais un service qui tourne (pas de coupure de l'API).
+    - name: S'assurer que k3s tourne (control-plane)
+      ansible.builtin.service:
+        name: k3s
+        state: started
+      when: "'k3s_control_plane' in group_names"
+
+    - name: S'assurer que k3s-agent tourne (agents)
+      ansible.builtin.service:
+        name: k3s-agent
+        state: started
+      when: "'k3s_agents' in group_names"
 
   handlers:
     - name: Appliquer netplan
