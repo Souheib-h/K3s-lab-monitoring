@@ -12,41 +12,48 @@ Zabbix agent already covers host-level metrics (RAM, disk, load) on
 Prometheus-srv. This dashboard deliberately covers **process-level only** 
 to avoid duplicating Zabbix's job, see ADR-007.
 
+## Variables
+
+| Variable | Query | Purpose |
+|---|---|---|
+| `$job` | `label_values(prometheus_build_info, job)` | Works whatever the scrape job is called (no longer hardcoded to `prometheus`) |
+| `$instance` | `label_values(prometheus_build_info{job="$job"}, instance)` | Multi-select, *All* by default; lets one dashboard cover several Prometheus servers |
+
 ## Structure: 18 panels, 3 rows
 
 ### Row 1: Process Health (7 panels)
 | Panel | Query |
 |---|---|
-| Uptime | `time() - process_start_time_seconds{job="prometheus"}` |
-| Memory RSS | `process_resident_memory_bytes{job="prometheus"}` |
-| CPU Usage % | `rate(process_cpu_seconds_total{job="prometheus"}[5m]) * 100` |
-| Goroutines | `go_goroutines{job="prometheus"}` |
-| Heap In-Use | `go_memstats_heap_inuse_bytes{job="prometheus"}` |
-| GC Pause Duration | `rate(go_gc_duration_seconds_sum[5m]) / rate(go_gc_duration_seconds_count[5m])` |
-| Open File Descriptors | `process_open_fds{job="prometheus"}` |
+| Uptime | `time() - process_start_time_seconds{job="$job", instance=~"$instance"}` |
+| Memory RSS | `process_resident_memory_bytes{job="$job", instance=~"$instance"}` |
+| CPU Usage % | `rate(process_cpu_seconds_total{job="$job", instance=~"$instance"}[5m]) * 100` |
+| Goroutines | `go_goroutines{job="$job", instance=~"$instance"}` |
+| Heap In-Use | `go_memstats_heap_inuse_bytes{job="$job", instance=~"$instance"}` |
+| GC Pause Duration | `rate(go_gc_duration_seconds_sum{job="$job", instance=~"$instance"}[5m]) / rate(go_gc_duration_seconds_count{job="$job", instance=~"$instance"}[5m])` |
+| Open File Descriptors | `process_open_fds{job="$job", instance=~"$instance"}` |
 
 ![Process Health row](img/grafana-self-monitoring-dashboard-1.png)
 
 ### Row 2: TSDB & Storage (6 panels)
 | Panel | Query |
 |---|---|
-| Active Series (Cardinality) | `prometheus_tsdb_head_series{job="prometheus"}` |
-| TSDB Compactions | `increase(prometheus_tsdb_compactions_total[10m])` |
-| Storage Size on Disk | `prometheus_tsdb_storage_blocks_bytes{job="prometheus"}` |
-| Ingestion Rate | `rate(prometheus_tsdb_head_samples_appended_total[5m])` |
-| Compaction Failures | `increase(prometheus_tsdb_compactions_failed_total[1h])` |
-| WAL Corruptions | `prometheus_tsdb_wal_corruptions_total or vector(0)` |
+| Active Series (Cardinality) | `prometheus_tsdb_head_series{job="$job", instance=~"$instance"}` |
+| TSDB Compactions | `increase(prometheus_tsdb_compactions_total{job="$job", instance=~"$instance"}[10m])` |
+| Storage Size on Disk | `prometheus_tsdb_storage_blocks_bytes{job="$job", instance=~"$instance"}` |
+| Ingestion Rate | `sum by (instance) (rate(prometheus_tsdb_head_samples_appended_total{job="$job", instance=~"$instance"}[5m]))` |
+| Compaction Failures | `increase(prometheus_tsdb_compactions_failed_total{job="$job", instance=~"$instance"}[1h])` |
+| WAL Corruptions | `sum by (instance) (prometheus_tsdb_wal_corruptions_total{job="$job", instance=~"$instance"})` |
 
 ![TSDB & Storage row](img/grafana-self-monitoring-dashboard-2.png)
 
 ### Row 3: Query Engine & Reliability (5 panels)
 | Panel | Query |
 |---|---|
-| Target Health | `up{job="prometheus"}` |
-| Scrape Duration | `scrape_duration_seconds{job="prometheus"}` |
-| Config Reload Status | `prometheus_config_last_reload_successful{job="prometheus"}` |
-| Query Latency (p99, inner_eval) | `prometheus_engine_query_duration_seconds{quantile="0.99", slice="inner_eval"}` |
-| Rule Evaluation Failures | `increase(prometheus_rule_evaluation_failures_total[1h])` |
+| Target Health | `up{job="$job", instance=~"$instance"}` |
+| Scrape Duration | `scrape_duration_seconds{job="$job", instance=~"$instance"}` |
+| Config Reload Status | `prometheus_config_last_reload_successful{job="$job", instance=~"$instance"}` |
+| Query Latency (p99, inner_eval) | `prometheus_engine_query_duration_seconds{job="$job", instance=~"$instance", quantile="0.99", slice="inner_eval"}` |
+| Rule Evaluation Failures (1h) | `increase(prometheus_rule_evaluation_failures_total{job="$job", instance=~"$instance"}[1h])` |
 
 ![Query Engine & Reliability row](img/grafana-self-monitoring-dashboard-3.png)
 
@@ -74,6 +81,13 @@ panel to watch first during incident triage.
   rendered as ~0.005% because `max_fds` defaults to the systemd 
   `LimitNOFILE` (500K+) on modern Ubuntu, the ratio is meaningless 
   against an oversized limit. Switched to raw value display.
+
+- **WAL Corruptions returned two series**: `metric or vector(0)` keeps
+  the real series *and* adds the label-less `vector(0)` (their label sets
+  differ, so `or` does not deduplicate). The metric is always exported by
+  Prometheus, so the fallback was dropped for `sum by (instance)`.
+- **Ingestion Rate split in two**: Prometheus 3 labels the counter with
+  `type="float"` / `type="histogram"`; summed by instance.
 
 ## Publication: Grafana.com
 
@@ -112,8 +126,10 @@ absence, not its `null` value, as an old-format signal.
 - **Category:** Templates
 - **Short description:** Process-level self-monitoring for Prometheus. 
   Zero external dependencies, no node_exporter required.
-- **Datasource:** Prometheus (job label must be `prometheus`, or the 
-  panel queries need adjusting on import)
+- **Datasource:** Prometheus; pick the scrape job and instance(s) with
+  the `$job` / `$instance` variables after import
+- **Republish needed:** the variables were added after the first upload,
+  the Grafana.com revision still has `job="prometheus"` hardcoded
 
 ![Dashboard live on Grafana.com](img/grafana-self-monitoring-dashboard-listed.png)
 
