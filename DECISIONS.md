@@ -592,7 +592,7 @@ The rule was replaced by flows that k3s-net actually initiates, found by logging
 
 Everything else is blocked by the interface default deny. Traffic *into* k3s-net (Prometheus scrapes, SSH from the bastion, Ansible) is unaffected: it is initiated from other interfaces and its replies match the state table.
 
-The old rule is kept **disabled** (`TEMP catch-all - to remove`) as a one-click rollback until the new set has run for a few days.
+The old rule was kept **disabled** (`TEMP catch-all - to remove`) as a one-click rollback, then **deleted on 2026-09-30** after two days without regression.
 
 **Verification (2026-09-28):** from `k3s-srv-1`, 1514 and HTTPS to Ubuntu succeed, NTP syncs, `55000` times out. `agents-health.yml`: all 12 Wazuh agents `connected` with the old rule disabled. `health-check.yml` now treats the bastion as a policy check: unreachable from k3s-net is the expected result.
 
@@ -652,5 +652,13 @@ Applied with `virsh net-dumpxml --inactive` → `sed` → `virsh net-define` (pe
 
 **Also on 2026-09-28:** a DHCP reservation `OPNsense-LAN 52:54:00:a7:c0:fc → 10.20.0.254` was added to monitoring-net. The pool (`.100-.254`) included OPNsense's static LAN address with no reservation, so a VM booting while OPNsense was down could have taken the gateway's IP. k3s-net already had the equivalent reservation for `.254`.
 
-**Pending check** after the next hypervisor restart, on a k3s node: `ip route | grep dhcp` should show `default via 10.10.0.254` and routes to `10.20`, `10.30`, `10.40`.
+**Verified on 2026-09-30** after a hypervisor restart:
+
+| Host | `ip route \| grep dhcp` |
+|---|---|
+| `k3s-srv-1` | `default`, `10.20.0.0/24`, `10.30.0.0/24`, `10.40.0.0/24` via `10.10.0.254` (only `10.40` before) |
+| `zabbix-srv` | `10.10.0.0/24`, `10.30.0.0/24`, `10.40.0.0/24` via `10.20.0.254`, no default (as intended) |
+| `load-srv` (Alpine) | unchanged: busybox `udhcpc` ignores option 121 and uses the router option (`default via 10.10.0.1 metric 202`); the `/etc/network/interfaces` route via OPNsense stays preferred |
+
+Same day, from `k3s-srv-1`: Wazuh 1514, Zabbix 10051, Loki 3100 and HTTPS succeed; Wazuh API 55000 and bastion 22 time out. `health-check.yml` / `agents-health.yml`: `failed=0`, bastion isolated from all 8 k3s-net hosts, 12/12 Wazuh agents connected.
 
