@@ -58,7 +58,16 @@ Secret          prometheus-token (type service-account-token, long-lived JWT)
 ```
 
 Since K8s 1.24 ServiceAccounts get no automatic token; the annotated Secret
-materializes one. Least privilege: a leaked token reads metrics, nothing else.
+materializes one.
+
+> **Correction (2026-09-30).** This role is **not** least privilege: `nodes/proxy`
+> with `get` also opens the kubelet's `/exec`, `/run` and `/pods` endpoints
+> (`kubectl auth can-i get nodes/proxy` returns `yes` for this ServiceAccount),
+> so a leaked token can run commands in pods. Scraping `/metrics` and
+> `/metrics/cadvisor` only needs `get` on `nodes/metrics`. Accepted as a known
+> limitation of the K3s learning cluster, see the
+> [K3s-lab README](https://github.com/Souheib-h/K3s-lab#statut-du-projet-et-limites-connues);
+> to be done right on the kubeadm cluster.
 Sanity check:
 
 ```
@@ -103,8 +112,10 @@ inlined in the config:
 
 Static targets are deliberate: six fixed nodes, no in-cluster discovery
 available from outside, and the config stays readable. `insecure_skip_verify`
-is accepted for the lab (kubelet serves a self-signed cert); the Bearer token
-still authenticates the client. Kubelets are six legitimate targets (each node
+is accepted for the lab; the Bearer token still authenticates the client, but
+it is sent to whoever answers on `:10250`. The K3s server CA
+(`/var/lib/rancher/k3s/server/tls/server-ca.crt`) could be used as `ca_file`
+instead (known limitation, same as above). Kubelets are six legitimate targets (each node
 serves its own metrics); kube-state-metrics is a cluster-wide singleton, one
 target regardless of how many doors exist.
 
